@@ -87,12 +87,13 @@ export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/<r28 or newer>   # Android Studio's SD
 make android-toolchain   # rustup target, cargo-ndk; checks the NDK and the lockfile
 make android             # → android/app/build/outputs/apk/debug/app-debug.apk (needs an SDK, platform 34)
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-adb push wow-data/Data /sdcard/Android/data/io.github.songoku119.azerothsurvivors/files/Data
+make android-data        # fetches the data on this machine if needed, then adb pushes it to the phone
 ```
 
-The app looks for `Data` in its own external files folder (the `adb push` above, no permission
-needed) and says what is missing when it finds none. Vulkan 1.1 and Android 10+ (arm64) are
-required; `adb logcat -s wsurvivors:* wgpu:*` is where it reports.
+The app looks for `Data` in its own external files folder, where `make android-data` puts it (no
+permission needed; the download runs on your machine, never in the app), and says what is missing
+when it finds none. Vulkan 1.1 and Android 10+ (arm64) are required; `adb logcat -s wsurvivors:*
+wgpu:*` is where it reports.
 
 ## The game data (not in this repo)
 

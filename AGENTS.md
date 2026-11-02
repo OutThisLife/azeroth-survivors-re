@@ -19,7 +19,7 @@ changing client code, and treat this file as authoritative for the fork's crates
 | `crates/warcraft-survivors` | the native desktop launcher (`cargo survivors`) | this repository's |
 | `crates/warcraft-survivors-android` | the Android launcher: `GameActivity` cdylib, env shim (`BENILLA_HOME`, `WOW_DATA`, `env.toml`), panic hook to logcat | this repository's; see docs/ANDROID.md |
 | `android/` | the Gradle project that packages the cdylib into an APK (`MainActivity : GameActivity`) | this repository's; no Rust here |
-| `scripts/android-setup.sh`, `scripts/android-build.sh`, `scripts/android-env.default.toml` | toolchain and build for the APK, and the `env.toml` preset the shim seeds on first run | this repository's |
+| `scripts/android-setup.sh`, `scripts/android-build.sh`, `scripts/android-data.sh`, `scripts/android-env.default.toml` | toolchain and build for the APK, putting the game data on a phone over adb, and the `env.toml` preset the shim seeds on first run | this repository's |
 | `crates/benilla-app/src/webbridge/` | the JavaScript bridge, wasm side | ours |
 | `crates/wenilla` | the wasm entry crate (`#[wasm_bindgen(start)]`) | ours |
 | `crates/wenilla-host` | local dev server: static files, `/data/*`, `/ws/*` relay. Loopback only. | ours |
@@ -45,6 +45,7 @@ cargo ndk -t arm64-v8a -P 29 check -p warcraft-survivors-android --no-default-fe
                             # the Android build without linking; what check.yml's android job runs (needs ANDROID_NDK_HOME, cargo-ndk)
 scripts/android-setup.sh    # once per machine: the aarch64-linux-android target, cargo-ndk, NDK and lockfile checks. `make android-toolchain`
 scripts/android-build.sh    # → android/app/build/outputs/apk/ via cargo-ndk and Gradle. `make android`; ANDROID_DEBUG=1 keeps symbols
+scripts/android-data.sh     # fetch-data.sh on this machine, then adb push Data into the installed app's files folder. `make android-data`
 cargo test -p wenilla-realm                # the realm service end to end, mock SOAP, sqlite; no game data needed
 cargo test --workspace                     # ~320 tests need a 1.12.1 patch chain and fail without one, on pristine upstream too
 ```

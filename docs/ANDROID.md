@@ -205,7 +205,7 @@ service with `.partial` staging. That becomes the follow-up.
 
 | task | where |
 |---|---|
-| Route A, no permission: `adb push Data /sdcard/Android/data/<pkg>/files/Data`; `WOW_DATA` points there (the shim's first choice) | shim, docs |
+| Route A, no permission: `adb push Data /sdcard/Android/data/<pkg>/files/Data`; `WOW_DATA` points there (the shim's first choice). `make android-data` (`scripts/android-data.sh`) runs `fetch-data.sh` on the desktop and pushes with `--sync` | shim, docs, script |
 | Route B, on-phone: `MANAGE_EXTERNAL_STORAGE` ("All files access", a settings toggle the panel deep-links to), then a folder picker that returns a real `/storage/emulated/0/…` path, written to `env.toml` as `WOW_DATA` | `android/` (Kotlin), shim |
 | "No game data" panel in `survivors/menu.rs` when `wow_data()` is `None`: what is needed, whose data it is, the two routes, a **Validate** button | `survivors/menu.rs` |
 | Validation: `Chain::open` (`chain.rs:97-125`) on the folder and the first error shown; the needed names are `mount_order`'s (`chain.rs:77`, private), so the Kotlin side does not try to know them and validation stays in Rust | shim |

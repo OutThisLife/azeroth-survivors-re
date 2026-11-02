@@ -5,7 +5,7 @@ DATA_DIR := wow-data
 DATA     := $(DATA_DIR)/Data
 WASM     := web/dist/wenilla_bg.wasm
 
-.PHONY: help build start native fetch-data toolchain wasm android-toolchain android clean
+.PHONY: help build start native fetch-data toolchain wasm android-toolchain android android-data clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -33,6 +33,9 @@ android-toolchain: ## Install the Android toolchain (rustup target, cargo-ndk; n
 
 android: ## Build the Android APK into android/app/build/outputs/apk/ (run `make android-toolchain` first)
 	./scripts/android-build.sh
+
+android-data: ## Fetch the game data here and adb push it to the connected phone (app installed first)
+	./scripts/android-data.sh
 
 clean: ## Remove the fetched game data and wasm build output
 	rm -rf web/dist $(DATA_DIR)
