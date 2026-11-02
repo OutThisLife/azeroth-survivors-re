@@ -116,7 +116,12 @@ make build WOW_DATA_URL=https://your-mirror.example/client.zip
 
 Or set it permanently by editing the single clearly-marked `DEFAULT_DATA_URL` line at the top of
 `scripts/fetch-data.sh`. Either way the URL must be a direct link to a zip holding the client's
-`Data/*.MPQ` files.
+`Data/*.MPQ` files, at any depth.
+
+When the default download fails, the script falls back to archive.org's whole-item zip of the
+same item (`DEFAULT_FALLBACK_URL`). That zip is built on the fly, so it cannot resume, and it may
+wrap the client zip inside it; the script unpacks the inner zip when it does. `WOW_DATA_FALLBACK_URL=`
+(empty) turns the fallback off, and a `WOW_DATA_URL` you set gets none.
 
 ## How it's built
 
