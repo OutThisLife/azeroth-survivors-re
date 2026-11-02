@@ -46,8 +46,13 @@ const ABOUT: &str = "Warcraft Survivors runs on the art, maps and sounds of a Wo
 1.12.1 client. It ships none of them: the game needs the Data folder (about 5.5 GB of .MPQ \
 archives) from a 1.12.1 client you own, read in place. Nothing is copied or uploaded.";
 
-const ROUTE_ADB: &str = "With a PC: connect the phone with USB debugging on and run\n\
-    adb push Data /sdcard/Android/data/<package>/files/Data\n\
+// Pushed into `files/`, not `files/Data`: `adb push` nests a folder inside an existing target,
+// so a second push to `files/Data` would make `files/Data/Data` (scripts/android-data.sh).
+const ROUTE_ADB: &str = "With a PC: connect the phone with USB debugging on and, from the game's \
+source folder, run\n\
+    make android-data\n\
+or push a Data folder you already have:\n\
+    adb push Data /sdcard/Android/data/io.github.songoku119.azerothsurvivors/files/\n\
 then press Validate.";
 
 const ROUTE_PICK: &str = "On the phone (coming with the Android app): allow \"All files \
