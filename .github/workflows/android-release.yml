@@ -27,6 +27,13 @@ jobs:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+      # The tag names the app's version: android-vX.Y.Z must match versionName in
+      # android/app/build.gradle.kts, or the app's own info shows a different version.
+      - name: tag matches versionName
+        run: |
+          want="${TAG#android-v}"
+          have=$(sed -n 's/^ *versionName = "\(.*\)"$/\1/p' android/app/build.gradle.kts)
+          [ "$want" = "$have" ] || { echo "::error::tag ${TAG} wants versionName ${want}, android/app/build.gradle.kts has ${have}"; exit 1; }
       # A release build of bevy and the engine needs more than the runner's free ~14 GB.
       - name: free disk
         run: |
@@ -80,10 +87,14 @@ jobs:
           body: |
             Experimental Android build (arm64, Android 10+, Vulkan 1.1 GPU). Not yet tested on a device.
 
-            **No game data is included.** Supply your own WoW 1.12.1 `Data` folder:
+            **No game data is included.** Supply your own WoW 1.12.1 `Data` folder. Install, then from the source folder:
             ```
             adb install azeroth-survivors-${{ env.TAG }}-arm64.apk
-            adb push /path/to/WoW/Data /sdcard/Android/data/io.github.songoku119.azerothsurvivors/files/Data
+            make android-data
+            ```
+            `make android-data` fetches the client on your machine if it is not there yet and copies its `Data` to the phone. To copy a `Data` folder you already have:
+            ```
+            adb push /path/to/WoW/Data /sdcard/Android/data/io.github.songoku119.azerothsurvivors/files/
             ```
             Touch controls: left thumb moves, tap or drag on the right to aim, on-screen spell, jump and pause buttons, Back pauses.
             The APK is debug-signed; uninstall the previous build before installing a new one.
