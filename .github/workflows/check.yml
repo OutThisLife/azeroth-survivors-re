@@ -11,6 +11,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # By hand, on any branch: for a PR whose event GitHub dropped, or a branch with no PR yet.
+  workflow_dispatch:
 concurrency:
   group: check-${{ github.ref }}
   cancel-in-progress: true
