@@ -17,7 +17,9 @@ import java.util.zip.ZipInputStream
  * data-less"): the same two archive.org links `scripts/fetch-data.sh` uses, in the same order,
  * through Android's DownloadManager (its notification shows the progress, it carries on with the
  * app in the background and across a reboot, and it needs no service of our own), then every
- * `Data/*.MPQ` in the zip unpacked into the app's `Data` folder. The data is Blizzard's; the
+ * `.MPQ` archive under `Data` in the zip unpacked into the app's `Data` folder. (Kotlin block
+ * comments nest, so the glob is spelled out here and in [extract]: a `/` `*` pair would open
+ * one.) The data is Blizzard's; the
  * screen says so before it starts, and the app still ships none of it.
  */
 object DataDownload {
@@ -142,7 +144,7 @@ object DataDownload {
     private fun baseName(name: String): String = name.substringAfterLast('/')
 
     /**
-     * Unpack every `Data/*.MPQ` of [zip] (at any depth) into [dataDir], flat. A zip with none but
+     * Unpack every `.MPQ` under a `Data` folder of [zip] (at any depth) into [dataDir], flat. A zip with none but
      * with a zip inside it, the whole-item download's shape, is read through that inner zip as a
      * stream, so the 5.5 GB client zip is never written out a second time. Minutes of work: call
      * it off the main thread. Returns how many archives were written; throws on a zip with
