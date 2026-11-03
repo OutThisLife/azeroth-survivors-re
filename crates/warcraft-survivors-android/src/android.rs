@@ -11,11 +11,12 @@ use crate::env_shim;
 /// The logcat tag, for `adb logcat -s wsurvivors:*`.
 const TAG: &str = "wsurvivors";
 
-/// Everything that has to be true before `run_survivors`: the panic hook (first, so a failure
-/// below still reaches logcat), then the environment from the app's directories and `env.toml`.
+/// Everything that has to be true before `run_survivors`: the app's directories, the status
+/// file and the panic hook, then the environment from `env.toml`. The hook comes after the
+/// first two lines because it writes to the status file; a panic before it (the `expect`, the
+/// `create_dir_all`) still reaches logcat through android-activity's stderr redirect
+/// (`RustStdoutStderr`), and the file keeps the Java side's `launching`.
 pub fn prepare() {
-    install_panic_hook();
-
     let app = bevy::android::ANDROID_APP
         .get()
         .expect("android_main sets ANDROID_APP before main");
@@ -32,6 +33,12 @@ pub fn prepare() {
             &format!("cannot create {}: {e}", home.display()),
         );
     }
+    // The stage file `MainActivity` shows while the engine comes up (`survivors/status.rs`
+    // takes over once Bevy runs). First thing after `home` exists, so the hook below can
+    // write `crash` into it too.
+    let status = env_shim::status_file(&home);
+    status_write(&status, "starting", "Starting the engine…");
+    install_panic_hook(status);
     // First run: seed the preset, which the player edits from then on (`adb shell run-as`).
     let env_path = home.join("env.toml");
     if !env_path.exists() {
@@ -51,14 +58,26 @@ pub fn prepare() {
     }
 }
 
-/// Chain a hook that writes the panic to logcat, then runs the previous one (the default
-/// stderr print; `crash::install` chains its file writer on top of this one later).
-fn install_panic_hook() {
+/// Chain a hook that writes the panic to logcat and to the status file (so the next launch
+/// can say what happened), then runs the previous one (the default stderr print;
+/// `crash::install` chains its file writer on top of this one later).
+fn install_panic_hook(status: PathBuf) {
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         log(LogPriority::FATAL, &format!("panic: {info}"));
+        status_write(&status, "crash", &format!("The game crashed: {info}"));
         previous(info);
     }));
+}
+
+/// One stage into the status file; a failure is logged, never fatal (it is a progress line).
+fn status_write(path: &std::path::Path, key: &str, text: &str) {
+    if let Err(e) = env_shim::write_status(path, key, text) {
+        log(
+            LogPriority::WARN,
+            &format!("cannot write {}: {e}", path.display()),
+        );
+    }
 }
 
 /// One line to logcat under [`TAG`]. An interior NUL would make `CString` fail; it is replaced

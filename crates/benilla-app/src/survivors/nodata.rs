@@ -20,7 +20,7 @@ use super::menu::MenuBuilt;
 /// On [`MenuRoot`] once the panel is in; [`MenuBuilt`] is not set, so a chain that appears
 /// later (it cannot today) would still build the menu.
 #[derive(Component)]
-struct NoDataBuilt;
+pub(super) struct NoDataBuilt;
 
 /// The Validate button.
 #[derive(Component)]
