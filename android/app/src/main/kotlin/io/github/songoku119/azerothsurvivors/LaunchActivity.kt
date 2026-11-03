@@ -1,10 +1,14 @@
 package io.github.songoku119.azerothsurvivors
 
 import android.app.Activity
+import android.app.AlertDialog
+import android.app.DownloadManager
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -26,12 +30,19 @@ class LaunchActivity : Activity() {
     private lateinit var headline: TextView
     private lateinit var detail: TextView
     private lateinit var buttons: LinearLayout
+    private val handler = Handler(Looper.getMainLooper())
+    private var watching: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(buildView())
         check()
+    }
+
+    override fun onDestroy() {
+        stopWatching()
+        super.onDestroy()
     }
 
     private fun buildView(): ScrollView {
@@ -79,6 +90,7 @@ class LaunchActivity : Activity() {
     }
 
     private fun check() {
+        stopWatching()
         buttons.removeAllViews()
 
         // 1. The game library. GameActivity loads it in its own onCreate, where a failure is a
@@ -99,20 +111,27 @@ class LaunchActivity : Activity() {
         //    files folder first (where `adb push` lands), then its internal one.
         val external = getExternalFilesDir(null)
         val candidates = listOfNotNull(external, filesDir).map { File(it, "Data") }
-        val data = candidates.firstOrNull { hasArchive(it, "terrain.MPQ") && hasArchive(it, "patch.MPQ") }
+        val data = candidates.firstOrNull {
+            !File(it, DataDownload.UNPACKING_MARK).exists() && hasArchive(it, "terrain.MPQ") && hasArchive(it, "patch.MPQ")
+        }
         if (data == null) {
+            // A download already under way, or finished and waiting to be unpacked, comes first.
+            if (resumeDownload()) return
             val target = candidates.first()
             show(
                 "No game data on this phone.",
                 "Azeroth Survivors runs on the art, maps and sounds of a World of Warcraft 1.12.1 " +
                     "client and ships none of them. Put the client's Data folder (about 5.5 GB of " +
                     ".MPQ archives) at:\n\n${target.path}\n\n" +
-                    "From a PC with the phone on USB debugging, in the game's source folder:\n" +
+                    "Download fetches that client from archive.org onto this phone (about 5.5 GB, " +
+                    "12 GB free needed while it unpacks; Wi-Fi advised).\n\n" +
+                    "Or, from a PC with the phone on USB debugging, in the game's source folder:\n" +
                     "    make android-data\n\n" +
                     "or, with a Data folder you already have:\n" +
                     "    adb push /path/to/WoW/Data ${target.parent}/\n\n" +
                     "Then tap Check again.",
             )
+            button("Download") { confirmDownload(DataDownload.urlIndex(this)) }
             button("Check again") { check() }
             button("Start anyway") { launch() }
             return
@@ -130,6 +149,195 @@ class LaunchActivity : Activity() {
 
         show("Starting…", "Game data: ${data.path}")
         launch()
+    }
+
+    // --- The in-app download (DataDownload) ---------------------------------------------------
+
+    /** The words before any bytes move: whose data it is, how much, where from. */
+    private fun confirmDownload(urlIndex: Int) {
+        val free = DataDownload.freeBytes(this)
+        if (DataDownload.root(this) == null) {
+            show("No storage for the download.", "This phone offers the app no external files folder.")
+            button("Back") { check() }
+            return
+        }
+        if (free < DataDownload.NEEDED_BYTES) {
+            show(
+                "Not enough space for the download.",
+                "About ${DataDownload.mb(DataDownload.NEEDED_BYTES) / 1024} GB free is needed while the " +
+                    "client unpacks (the zip and the archives are both on the phone for a while); " +
+                    "${DataDownload.mb(free) / 1024} GB is free. Make room, then tap Download again.",
+            )
+            button("Back") { check() }
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Download the game data?")
+            .setMessage(
+                "This fetches a World of Warcraft 1.12.1 client (about 5.5 GB) from archive.org, " +
+                    "${DataDownload.URL_NAMES[urlIndex]}, and unpacks its Data folder here. The client " +
+                    "is Blizzard Entertainment's; Azeroth Survivors ships none of it and only reads it. " +
+                    "Wi-Fi is advised. The download continues with the app closed; come back here to " +
+                    "unpack it.",
+            )
+            .setPositiveButton("Download") { _, _ ->
+                // Two dialogs from a double tap confirm one download, not two.
+                if (DataDownload.currentId(this) < 0) DataDownload.start(this, urlIndex)
+                watchDownload()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * A download the manager still knows about, or a finished zip not yet unpacked: show it
+     * instead of the no-data words. True when this screen is now about that.
+     */
+    private fun resumeDownload(): Boolean {
+        if (DataDownload.unpacking) {
+            // A thread from before this screen is still writing; its words go nowhere now.
+            buttons.removeAllViews()
+            show("Unpacking the game data…", "Still working; tap Check again in a minute.")
+            button("Check again") { check() }
+            return true
+        }
+        val id = DataDownload.currentId(this)
+        if (id < 0) return false
+        if (DataDownload.progress(this, id) == null) {
+            // The manager forgot it (cleared by the system, or the notification swiped away).
+            DataDownload.forget(this)
+            return false
+        }
+        watchDownload()
+        return true
+    }
+
+    /** Poll the manager once a second and put its state into words; hand over when it is done. */
+    private fun watchDownload() {
+        stopWatching()
+        buttons.removeAllViews()
+        val id = DataDownload.currentId(this)
+        if (id < 0) return
+        val urlIndex = DataDownload.urlIndex(this)
+        button("Cancel download") {
+            DataDownload.cancel(this, id)
+            check()
+        }
+        val tick = object : Runnable {
+            override fun run() {
+                val p = DataDownload.progress(this@LaunchActivity, id)
+                if (p == null) {
+                    DataDownload.forget(this@LaunchActivity)
+                    check()
+                    return
+                }
+                val size = if (p.total > 0) "${DataDownload.mb(p.soFar)} of ${DataDownload.mb(p.total)} MB"
+                else "${DataDownload.mb(p.soFar)} MB so far"
+                when (p.status) {
+                    DownloadManager.STATUS_SUCCESSFUL -> {
+                        stopWatching()
+                        unpack(id, DataDownload.downloadedFile(this@LaunchActivity, p))
+                        return
+                    }
+                    DownloadManager.STATUS_FAILED -> {
+                        stopWatching()
+                        downloadFailed(id, urlIndex, DataDownload.reasonText(p.reason))
+                        return
+                    }
+                    DownloadManager.STATUS_PAUSED ->
+                        show(
+                            "Download paused: ${DataDownload.reasonText(p.reason)}.",
+                            "$size (${DataDownload.URL_NAMES[urlIndex]})\n\nOn mobile data, Android holds a download this " +
+                                "large for Wi-Fi; its notification offers to let it through.",
+                        )
+                    DownloadManager.STATUS_PENDING ->
+                        show("Download starting…", DataDownload.URLS[urlIndex])
+                    else ->
+                        show("Downloading the game data…", "$size (${DataDownload.URL_NAMES[urlIndex]})\n\nThe download goes on with the app closed; the notification shows it.")
+                }
+                handler.postDelayed(this, 1000L)
+            }
+        }
+        watching = tick
+        handler.post(tick)
+    }
+
+    private fun downloadFailed(id: Long, urlIndex: Int, reason: String) {
+        DataDownload.cancel(this, id)
+        buttons.removeAllViews()
+        val other = (urlIndex + 1) % DataDownload.URLS.size
+        show(
+            "The download failed: $reason.",
+            "From ${DataDownload.URL_NAMES[urlIndex]}:\n${DataDownload.URLS[urlIndex]}\n\n" +
+                "Try again, or try ${DataDownload.URL_NAMES[other]} (it cannot resume a broken transfer).",
+        )
+        button("Try again") { confirmDownload(urlIndex) }
+        button("Try ${DataDownload.URL_NAMES[other]}") { confirmDownload(other) }
+        button("Back") { check() }
+    }
+
+    /**
+     * The zip is down: unpack it on a worker thread, with the words updated from there. One at a
+     * time in the process, and nothing is posted to a screen that is gone.
+     */
+    private fun unpack(id: Long, zip: File?) {
+        if (DataDownload.unpacking) {
+            resumeDownload()
+            return
+        }
+        val root = DataDownload.root(this)
+        if (zip == null || root == null || !zip.isFile) {
+            DataDownload.cancel(this, id)
+            buttons.removeAllViews()
+            show("The downloaded file is missing.", "Tap Download to fetch it again.")
+            button("Download") { confirmDownload(DataDownload.urlIndex(this)) }
+            button("Back") { check() }
+            return
+        }
+        DataDownload.unpacking = true
+        buttons.removeAllViews()
+        show("Unpacking the game data…", "Reading ${zip.name} (${DataDownload.mb(zip.length())} MB). Keep the app open; this takes a few minutes.")
+        val target = File(root, "Data")
+        Thread {
+            try {
+                val count = DataDownload.extract(zip, target) { line ->
+                    handler.post {
+                        if (isDestroyed) return@post
+                        detail.text = line
+                    }
+                }
+                DataDownload.unpacking = false
+                // Through the manager, which also drops the entry from the Downloads app.
+                DataDownload.cancel(this, id)
+                handler.post {
+                    if (isDestroyed) return@post
+                    show("Unpacked $count archives.", "Game data: ${target.path}")
+                    check()
+                }
+            } catch (e: Exception) {
+                DataDownload.unpacking = false
+                handler.post {
+                    if (isDestroyed) return@post
+                    buttons.removeAllViews()
+                    show(
+                        "Unpacking failed.",
+                        "$e\n\nThe zip is kept at ${zip.path}. If this keeps failing with the whole-item " +
+                            "zip, download the direct file instead.",
+                    )
+                    button("Unpack again") { unpack(id, zip) }
+                    button("Download again") {
+                        DataDownload.cancel(this, id)
+                        confirmDownload(DataDownload.urlIndex(this))
+                    }
+                    button("Back") { check() }
+                }
+            }
+        }.start()
+    }
+
+    private fun stopWatching() {
+        watching?.let { handler.removeCallbacks(it) }
+        watching = null
     }
 
     /** The two archives nothing boots without, in whichever case the client was unpacked in. */

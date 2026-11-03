@@ -11,6 +11,9 @@
         android:name="android.hardware.touchscreen"
         android:required="true" />
 
+    <!-- Only for the launch screen's Download button (DataDownload.kt); the game itself is offline. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- configChanges below lists every change the native side can live through: an unlisted one
          (a keyboard plugged in, dark mode, a font-scale change) recreates the activity, which
          android-activity cannot hand to a running Bevy app.
