@@ -81,10 +81,25 @@ pub fn data_dir(
     internal.join("Data")
 }
 
+/// The boot-stage file `MainActivity` polls (`WOW_STATUS_FILE`; `survivors/status.rs` has the
+/// format). Under `home`, next to `env.toml`, so the Java side finds it from `getFilesDir()`.
+pub fn status_file(home: &Path) -> PathBuf {
+    home.join("status.txt")
+}
+
+/// Write one stage, `<key>\n<text>\n`, through a temp file and a rename so the polling reader
+/// never sees half a line. The same shape `survivors/status.rs` writes from inside Bevy.
+pub fn write_status(path: &Path, key: &str, text: &str) -> std::io::Result<()> {
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, format!("{key}\n{text}\n"))?;
+    std::fs::rename(&tmp, path)
+}
+
 /// The variables to set before the app boots, in order: `env.toml`'s own first, then the
-/// defaults it did not name. `BENILLA_HOME` is always `home` (the file lives in it, so it
-/// cannot move itself); `WOW_DATA` and `WGPU_BACKEND` keep an `env.toml` value, and
-/// `WGPU_BACKEND` also keeps one the process already carries (`already_set`).
+/// defaults it did not name. `BENILLA_HOME` and `WOW_STATUS_FILE` are always under `home`
+/// (the file lives in it, so it cannot move itself, and the Java side reads the status from
+/// there); `WOW_DATA` and `WGPU_BACKEND` keep an `env.toml` value, and `WGPU_BACKEND` also
+/// keeps one the process already carries (`already_set`).
 pub fn variables(
     home: &Path,
     data: &Path,
@@ -92,11 +107,15 @@ pub fn variables(
     already_set: impl Fn(&str) -> bool,
 ) -> Vec<(String, String)> {
     let mut vars = parse_env_toml(env_toml);
-    vars.retain(|(k, _)| k != "BENILLA_HOME");
+    vars.retain(|(k, _)| k != "BENILLA_HOME" && k != "WOW_STATUS_FILE");
     let has = |vars: &[(String, String)], key: &str| vars.iter().any(|(k, _)| k == key);
     vars.push((
         "BENILLA_HOME".to_string(),
         home.to_string_lossy().into_owned(),
+    ));
+    vars.push((
+        "WOW_STATUS_FILE".to_string(),
+        status_file(home).to_string_lossy().into_owned(),
     ));
     if !has(&vars, "WOW_DATA") {
         vars.push(("WOW_DATA".to_string(), data.to_string_lossy().into_owned()));
@@ -152,20 +171,42 @@ mod tests {
         assert_eq!(get(&vars, "BENILLA_HOME"), Some("/files/benilla-config"));
         assert_eq!(get(&vars, "WOW_DATA"), Some("/files/Data"));
         assert_eq!(get(&vars, "WGPU_BACKEND"), Some("vulkan"));
-        assert_eq!(vars.len(), 3);
+        assert_eq!(
+            get(&vars, "WOW_STATUS_FILE"),
+            Some("/files/benilla-config/status.txt")
+        );
+        assert_eq!(vars.len(), 4);
     }
 
     #[test]
     fn env_toml_overrides_data_and_backend_but_not_home() {
         let home = Path::new("/files/benilla-config");
         let data = Path::new("/files/Data");
-        let text = "WOW_DATA = \"/sdcard/wow/Data\"\nWGPU_BACKEND = \"gl\"\nBENILLA_HOME = \"/elsewhere\"\nWOW_NO_BC = \"1\"\n";
+        let text = "WOW_DATA = \"/sdcard/wow/Data\"\nWGPU_BACKEND = \"gl\"\nBENILLA_HOME = \"/elsewhere\"\nWOW_STATUS_FILE = \"/elsewhere/s\"\nWOW_NO_BC = \"1\"\n";
         let vars = variables(home, data, text, |_| false);
         assert_eq!(get(&vars, "WOW_DATA"), Some("/sdcard/wow/Data"));
         assert_eq!(get(&vars, "WGPU_BACKEND"), Some("gl"));
         assert_eq!(get(&vars, "BENILLA_HOME"), Some("/files/benilla-config"));
+        assert_eq!(
+            get(&vars, "WOW_STATUS_FILE"),
+            Some("/files/benilla-config/status.txt")
+        );
         assert_eq!(get(&vars, "WOW_NO_BC"), Some("1"));
-        assert_eq!(vars.len(), 4);
+        assert_eq!(vars.len(), 5);
+    }
+
+    #[test]
+    fn a_status_write_is_whole_and_leaves_no_temp() {
+        let dir = std::env::temp_dir().join(format!("wsurvivors-status-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = status_file(&dir);
+        write_status(&path, "starting", "Starting the engine…").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "starting\nStarting the engine…\n"
+        );
+        assert!(!path.with_extension("tmp").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

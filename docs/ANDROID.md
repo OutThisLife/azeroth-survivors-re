@@ -439,7 +439,8 @@ Performance captures use `WOW_FPS_JOURNAL=<csv>` through `env.toml` (written und
 
 | symptom | look at |
 |---|---|
-| the APK exits at once | `adb logcat -s wsurvivors:* wgpu:*`; a tombstone under `/data/tombstones` through `ndk-stack`; `games-activity` vs `android-activity` version; a duplicated `android-activity` in `Cargo.lock` |
+| the icon opens to black, or nothing | the launch screen (`LaunchActivity.kt`) names a missing library or `Data` folder before the engine starts, and the boot overlay (`MainActivity.kt`) shows the stage from `<filesDir>/benilla-config/status.txt` (`survivors/status.rs`, the shim's `starting`/`crash`); a stage that never settles is where it died: `adb logcat -s wsurvivors:* wgpu:*` |
+| the APK exits at once | the next launch screen says what the last run stopped at; `adb logcat -s wsurvivors:* wgpu:*`; a tombstone under `/data/tombstones` through `ndk-stack`; `games-activity` vs `android-activity` version; a duplicated `android-activity` in `Cargo.lock` |
 | install refused on Android 15 | 16 KB page alignment: `llvm-readelf -l`, `zipalign -c -P 16` |
 | "no install" after a push | `WOW_DATA` in the shim's log line; `adb shell ls /sdcard/Android/data/<pkg>/files/Data` |
 | textures crawl in, then OOM | `blp: device reports no BC support`: the RGBA8 fallback; P2 options in order |

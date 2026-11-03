@@ -19,6 +19,7 @@ mod menu;
 mod minimap;
 mod mobility;
 mod nodata;
+mod status;
 mod units;
 
 use benilla_world::schedule::WorldStage;
@@ -47,6 +48,7 @@ impl Plugin for SurvivorsPlugin {
                 lifecycle::plugin,
                 framecap::plugin,
                 nodata::plugin,
+                status::plugin,
             ))
             .init_state::<Phase>()
             .init_resource::<Rng>()
