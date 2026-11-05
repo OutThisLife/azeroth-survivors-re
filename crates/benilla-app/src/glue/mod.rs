@@ -66,6 +66,11 @@ impl GlueClicks {
     pub(crate) fn hit(&self, widget: Entity) -> bool {
         self.0.contains(&widget)
     }
+
+    /// A click from a touch screen, which releases to no hover: `survivors/tap.rs` (a carry).
+    pub(crate) fn tap(&mut self, widget: Entity) {
+        self.0.insert(widget);
+    }
 }
 
 /// A glue button fires on the release, only when it lands back on the button that took the press.
