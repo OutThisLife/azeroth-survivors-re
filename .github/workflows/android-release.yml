@@ -92,7 +92,7 @@ jobs:
             adb install azeroth-survivors-${{ env.TAG }}-arm64.apk
             make android-data
             ```
-            `make android-data` fetches the client on your machine if it is not there yet and copies its `Data` to the phone. To copy a `Data` folder you already have:
+            Or tap **Download** on the app's first screen: it fetches the client from archive.org onto the phone (5.5 GB; 12 GB free while it unpacks). `make android-data` fetches the client on your machine if it is not there yet and copies its `Data` to the phone. To copy a `Data` folder you already have:
             ```
             adb push /path/to/WoW/Data /sdcard/Android/data/io.github.songoku119.azerothsurvivors/files/
             ```

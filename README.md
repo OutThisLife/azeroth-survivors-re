@@ -91,8 +91,9 @@ make android-data        # fetches the data on this machine if needed, then adb 
 ```
 
 The app looks for `Data` in its own external files folder, where `make android-data` puts it (no
-permission needed; the download runs on your machine, never in the app). Its launch screen says
-what is missing when it finds none, and shows the engine's progress until the pick screen is up. Vulkan 1.1 and Android 10+ (arm64) are required; `adb logcat -s wsurvivors:*
+storage permission needed). Its launch screen says what is missing when it finds none, with a **Download**
+button that fetches the client from archive.org onto the phone instead, and shows the engine's
+progress until the pick screen is up. Vulkan 1.1 and Android 10+ (arm64) are required; `adb logcat -s wsurvivors:*
 wgpu:*` is where it reports.
 
 ## The game data (not in this repo)

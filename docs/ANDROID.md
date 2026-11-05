@@ -63,19 +63,23 @@ reading a WoW 1.12.1 `Data` folder the user supplies.
 | in scope | out of scope (non-goals) |
 |---|---|
 | survivors mode only (`survivors::ACTIVE`, `lib.rs:231`; `connect: false`, `lib.rs:436`) | the full client: login, realm, FrameXML/Lua UI, chat, addons |
-| offline, single player | the realm relay, WebBridge, any network use |
+| offline, single player | the realm relay, WebBridge, any network use beyond the launch screen's opt-in Download (`DataDownload.kt`) |
 | sideloaded APK (`adb install`, or a file the user copies over) | Google Play, AAB, Play Asset Delivery, in-app updates |
-| data-less app: the user supplies their own `Data` folder | shipping, downloading or mirroring game data from the app |
+| data-less APK: the user supplies their own `Data` folder, or has the app fetch it from archive.org | shipping or mirroring game data in the APK |
 | landscape, phones and tablets, Vulkan GPUs | portrait, GLES-only devices, Chromebooks (untested, not blocked) |
 | touch controls that leave keyboard/mouse working everywhere | gamepad (gilrs is compiled but disabled, `benilla-world/src/boot.rs:83`; could come later) |
 
 **Why data-less and why no store.** The MPQ contents are Blizzard's copyright (README, "Legal").
 This repository ships engine code only and reads a client the user already owns. An APK carrying
 the data would distribute that content; a store listing would do so to the public under our name.
-`scripts/fetch-data.sh` pulls from archive.org on the user's own machine and stays a desktop-side
-step. The only defensible shape on a phone is the desktop's: our code, their data, their device.
-With no data the app boots to a clear "no game data" screen with the import recipe, never to a
-download button.
+`scripts/fetch-data.sh` pulls from archive.org on the user's own machine. With no data the app
+boots to a clear "no game data" screen with the import recipe.
+
+That screen also has a **Download** button, at the owner's decision: `DataDownload.kt` fetches the same archive.org zips `fetch-data.sh` does, in the same order,
+through Android's DownloadManager, and unpacks `Data/*.MPQ` into the app's folder. The APK still
+carries no data, and the button says whose data it is before it starts; but the app, not the
+player's PC, is now what fetches it, which is a larger exposure than the desktop recipe. It is a
+sideloaded build with no store listing; that is the line that stays.
 
 **Provenance.** `crates/benilla-app/src/survivors/` is this repository's own code living inside
 upstream's `benilla-app` crate (README, "How it's built"), as are the `warcraft-survivors*`
