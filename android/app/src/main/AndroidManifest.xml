@@ -42,6 +42,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="false"
+            android:theme="@style/AppTheme.Game"
             android:launchMode="singleTask"
             android:screenOrientation="sensorLandscape"
             android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|fontScale|navigation|density">
