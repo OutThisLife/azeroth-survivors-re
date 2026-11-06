@@ -64,7 +64,12 @@
   // Dev page: allow `?user=&pass=&char=` links to log in. A hosting page that fetched the
   // credentials itself sets `window.__wenilla_env = {user, pass, host}` here instead, and the
   // client then never reads credentials from the URL (`benilla_app::webenv`).
-  window.__wenilla_env = { dev_query_creds: '1' };
+  // The JavaScript bridge publishes unit snapshots every frame (~1 % of the main thread) and
+  // nothing in survivors reads them, so it stays off unless a `?bridge=` link asks for it.
+  window.__wenilla_env = {
+    dev_query_creds: '1',
+    ...(new URLSearchParams(location.search).has('bridge') ? {} : { bridge: '0' }),
+  };
 </script>
 <script type="module">
   import init from './wenilla.js';
@@ -83,16 +88,18 @@
     .then(({ requestPersistentStorage }) => requestPersistentStorage())
     .catch((e) => console.warn('platform.js:', e));
   // The JavaScript bridge (web/bridge.js, `window.wenilla` in the console): live game state
-  // out, commands in, the hidden-tab keepalive. Dynamic, never load-bearing. `?bridge=hud` /
-  // `?bridge=idle` mount an example from web/examples/ on top; `?bridge=0` turns it off.
-  import('./bridge.js')
-    .then(() => {
-      const example = new URLSearchParams(location.search).get('bridge');
-      if (example && /^[a-z]+$/.test(example) && example !== '0') {
-        import(`./examples/${example}.js`).catch((e) => console.warn(`examples/${example}.js:`, e));
-      }
-    })
-    .catch((e) => console.warn('bridge.js:', e));
+  // out, commands in, the hidden-tab keepalive. Dynamic, never load-bearing, and only on request:
+  // `?bridge=1` loads it, `?bridge=hud` / `?bridge=idle` also mount an example from web/examples/.
+  const bridge = new URLSearchParams(location.search).get('bridge');
+  if (bridge && bridge !== '0') {
+    import('./bridge.js')
+      .then(() => {
+        if (/^[a-z]+$/.test(bridge)) {
+          import(`./examples/${bridge}.js`).catch((e) => console.warn(`examples/${bridge}.js:`, e));
+        }
+      })
+      .catch((e) => console.warn('bridge.js:', e));
+  }
   const w = await boot(init);
   bind(w.memory);
 </script>

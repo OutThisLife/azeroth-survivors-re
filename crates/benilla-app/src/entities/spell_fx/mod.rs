@@ -81,11 +81,18 @@ pub(crate) fn tick_fx_tint(
     }
     let now = time.elapsed_secs();
     reg.0.retain(|id, (anim, origin)| {
-        let Some(mat) = materials.get_mut(*id) else {
+        let Some(mat) = materials.get(*id) else {
             return false; // the instance despawned, and its clone with it
         };
         let rgb = anim.sample(now - *origin);
-        mat.extension.tint = Vec4::new(rgb[0], rgb[1], rgb[2], 1.0);
+        let tint = Vec4::new(rgb[0], rgb[1], rgb[2], 1.0);
+        // `get_mut` marks the material modified even for an equal write, which re-prepares it
+        // (a new bind group) that frame: write only a real change.
+        if mat.extension.tint != tint {
+            if let Some(mat) = materials.get_mut(*id) {
+                mat.extension.tint = tint;
+            }
+        }
         true
     });
 }

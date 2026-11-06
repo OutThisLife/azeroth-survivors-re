@@ -33,7 +33,7 @@ mkdir -p "${DIST}"
 # The name section is half the file (~170 MB -> ~90 MB) and only feeds stack-trace symbols.
 strip=(--remove-name-section --remove-producers-section)
 [ "${WEB_DEBUG:-0}" = 1 ] && strip=()
-wasm-bindgen --target web --no-typescript "${strip[@]}" --out-dir "${DIST}" "${WASM}"
+wasm-bindgen --target web --no-typescript ${strip[@]+"${strip[@]}"} --out-dir "${DIST}" "${WASM}"
 cp web/index.html web/favicon.svg web/wasi_stubs.js web/boot.js web/platform.js web/bridge.js "${DIST}/"
 # The bridge examples (web/README.md § "JavaScript bridge"): a HUD, an idle loop.
 mkdir -p "${DIST}/examples" && cp web/examples/*.js "${DIST}/examples/"
@@ -47,13 +47,14 @@ for m in web/boot-manifest.json web/world-manifest.json; do if [ -f "$m" ]; then
 # match what rustc emitted; without them wasm-opt refuses the module. Skipped when absent.
 WASM_OPT="${WASM_OPT:-$(pwd)/tools/binaryen/bin/wasm-opt}"
 command -v "${WASM_OPT}" >/dev/null || WASM_OPT="$(command -v wasm-opt || true)"
-if [ -n "${WASM_OPT}" ] && [ "${WEB_DEBUG:-0}" != 1 ]; then
-  "${WASM_OPT}" -O3 --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext \
+# WEB_DEBUG keeps the names through the pass (-g), so a profile reads the shipping code.
+keep=()
+[ "${WEB_DEBUG:-0}" = 1 ] && keep=(-g)
+if [ -n "${WASM_OPT}" ]; then
+  "${WASM_OPT}" -O3 ${keep[@]+"${keep[@]}"} --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext \
     --enable-mutable-globals --enable-reference-types --enable-multivalue \
     "${DIST}/wenilla_bg.wasm" -o "${DIST}/wenilla_bg.wasm.opt"
   mv "${DIST}/wenilla_bg.wasm.opt" "${DIST}/wenilla_bg.wasm"
-elif [ "${WEB_DEBUG:-0}" = 1 ]; then
-  echo "WEB_DEBUG=1 — skipping wasm-opt to preserve debugging symbols"
 else
   echo "wasm-opt not found (scripts/web-setup.sh fetches binaryen) — shipping the unoptimised module"
 fi

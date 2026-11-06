@@ -177,8 +177,13 @@ pub(super) fn update_model_particles(
                     }
                     *tag = MeshTag(crate::mesh_tag::alpha_bits(rgba[3]));
                 }
-                if let Some(m) = materials.get_mut(mat) {
-                    m.extension.tint = Vec4::new(rgba[0], rgba[1], rgba[2], 1.0);
+                // `get_mut` marks the material modified even for an equal write, and a modified
+                // material is re-prepared (new bind group) that frame: write only a real change.
+                let tint = Vec4::new(rgba[0], rgba[1], rgba[2], 1.0);
+                if materials.get(mat).is_some_and(|m| m.extension.tint != tint) {
+                    if let Some(m) = materials.get_mut(mat) {
+                        m.extension.tint = tint;
+                    }
                 }
             }
         }

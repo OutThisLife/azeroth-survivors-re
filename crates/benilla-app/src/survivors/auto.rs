@@ -40,10 +40,16 @@ pub(super) struct Auto {
 impl Auto {
     /// One screenshot named for this screen, the first time it shows.
     fn capture_once(&mut self, commands: &mut Commands, name: String) {
-        let Some(dir) = &self.shots else { return };
         if self.seen.contains(&name) {
             return;
         }
+        // A browser has no folder to write to: the moment goes to the console instead, for a
+        // DevTools driver to screenshot.
+        let Some(dir) = &self.shots else {
+            info!("survivors auto: capture {name}");
+            self.seen.push(name);
+            return;
+        };
         let path = dir.join(format!("{name}.png"));
         commands
             .spawn(Screenshot::primary_window())
@@ -53,7 +59,7 @@ impl Auto {
 }
 
 pub(super) fn from_env() -> Option<Auto> {
-    let want = std::env::var("WOW_SURVIVORS_AUTO").ok()?;
+    let want = crate::webenv::var("WOW_SURVIVORS_AUTO")?;
     let (name, mode) = want.trim().split_once(':').unwrap_or((want.trim(), ""));
     let idle = mode.eq_ignore_ascii_case("idle");
     let late = mode.eq_ignore_ascii_case("late");
@@ -62,7 +68,7 @@ pub(super) fn from_env() -> Option<Auto> {
         .iter()
         .position(|c| c.name.eq_ignore_ascii_case(name))
         .unwrap_or(0);
-    let map = std::env::var("WOW_SURVIVORS_MAP").ok().map_or(0, |m| {
+    let map = crate::webenv::var("WOW_SURVIVORS_MAP").map_or(0, |m| {
         let m = m.trim().to_ascii_lowercase();
         m.parse::<usize>()
             .ok()

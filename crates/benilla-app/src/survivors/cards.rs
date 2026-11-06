@@ -7,6 +7,7 @@ use bevy::prelude::*;
 use bevy::ui::RelativeCursorPosition;
 
 use super::data::{self, Kind};
+use super::fill::FillMaterial;
 use super::hud::{self, Choice, HudFont, Offer, SpellIcon};
 use super::{Phase, Rng, Run};
 
@@ -147,10 +148,6 @@ pub(super) struct Card {
     rarity: Rarity,
 }
 
-/// The rarity glow behind the card, which swells under the cursor.
-#[derive(Component)]
-pub(super) struct CardGlow;
-
 /// The shine that sweeps across a card as it lands.
 #[derive(Component)]
 pub(super) struct CardShine(usize);
@@ -173,6 +170,7 @@ pub(super) fn deal_cards(
     spells: Option<Res<crate::ui_action::Spells>>,
     font: Res<HudFont>,
     rows: Query<Entity, With<hud::OfferRow>>,
+    mut fills: ResMut<Assets<FillMaterial>>,
 ) {
     if !offer.is_changed() {
         return;
@@ -213,12 +211,6 @@ pub(super) fn deal_cards(
                     border_radius: BorderRadius::all(Val::Px(10.0)),
                     ..default()
                 },
-                // A dark card face lit from the top in the rarity's colour.
-                BackgroundGradient::from(LinearGradient::to_bottom(vec![
-                    ColorStop::percent(rc.mix(&Color::BLACK, 0.55).with_alpha(0.98), 0.0),
-                    ColorStop::percent(Color::srgba(0.05, 0.04, 0.035, 0.97), 42.0),
-                    ColorStop::percent(Color::srgba(0.02, 0.015, 0.01, 0.98), 100.0),
-                ])),
                 BorderColor::all(rc),
                 BoxShadow::new(
                     rc.with_alpha(0.0),
@@ -235,24 +227,33 @@ pub(super) fn deal_cards(
                 Visibility::Hidden,
             ))
             .with_children(|c| {
+                // A dark face lit from the top in the rarity's colour, inside the border.
+                let inner_h = CARD_H - 4.0;
                 c.spawn((
-                    CardGlow,
                     Node {
                         position_type: PositionType::Absolute,
                         left: Val::Px(0.0),
                         right: Val::Px(0.0),
                         top: Val::Px(0.0),
-                        height: Val::Px(150.0),
+                        bottom: Val::Px(0.0),
                         ..default()
                     },
-                    BackgroundGradient::from(RadialGradient::new(
-                        UiPosition::new(Vec2::new(0.0, -0.1), Val::Auto, Val::Auto),
-                        RadialGradientShape::FarthestSide,
-                        vec![
-                            ColorStop::percent(rc.with_alpha(0.45), 0.0),
-                            ColorStop::percent(rc.with_alpha(0.0), 100.0),
-                        ],
-                    )),
+                    MaterialNode(
+                        fills.add(
+                            FillMaterial::vertical(
+                                rc.mix(&Color::BLACK, 0.55).with_alpha(0.98),
+                                Color::srgba(0.05, 0.04, 0.035, 0.97),
+                                0.42,
+                                Color::srgba(0.02, 0.015, 0.01, 0.98),
+                                8.0 / inner_h,
+                            )
+                            .with_glow(
+                                rc.with_alpha(0.45),
+                                Vec2::new(0.5, 60.0 / inner_h),
+                                Vec2::new((CARD_W - 4.0) / 2.0 / inner_h, 90.0 / inner_h),
+                            ),
+                        ),
+                    ),
                     bevy::ui::FocusPolicy::Pass,
                 ));
                 // The key and the rarity on one line along the top.
