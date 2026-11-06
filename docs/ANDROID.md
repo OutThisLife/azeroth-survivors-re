@@ -237,7 +237,7 @@ paused; Back behaves as above.
 |---|---|
 | `check.yml`: a separate `android` job (`ci.yml:35` deletes `/usr/local/lib/android` in its own job, so nothing preinstalled is assumed) using `nttld/setup-ndk` pinned, `cargo-ndk`, and `cargo check --target aarch64-linux-android -p warcraft-survivors-android --no-default-features`; the NDK clang is needed even for `check` because `lua-src`'s `cc` build runs (`CC_aarch64_linux_android`) | `.github/workflows/check.yml` |
 | Release: `cargo ndk … --release` stripped, `assembleRelease`, `apksigner` v2+v3 with a keystore the operator keeps outside the repo; a debug-signed install cannot be upgraded by a release-signed one, so testers reinstall once | `scripts/android-build.sh`, docs |
-| `targetSdk` decision: stay on 34 for v1 (35 enforces edge-to-edge); if raised, `layoutInDisplayCutoutMode=shortEdges` and safe-area padding on the HUD's edge anchors | `android/` |
+| `targetSdk` decision: stay on 34 for v1 (35 enforces edge-to-edge). `windowLayoutInDisplayCutoutMode=shortEdges` is in already (`AppTheme.Game`): the first device showed the default's letterbox, a black strip on the cutout side with the right-anchored HUD off the far edge; safe-area padding for the corner under the hole is still open | `android/` |
 | `make android`; README "Play it on Android"; `CONTROLS.md` touch table; AGENTS.md table rows for `crates/warcraft-survivors*`, `survivors/` and `android/`; UPSTREAM.md's carry list gets "Upstream touches" below | docs |
 
 Exit: an Android-only break fails `check.yml`; `make android` builds an installable APK from a
