@@ -404,10 +404,19 @@ pub(super) fn compose(
     hero: Query<&Transform, With<Hero>>,
     enemies: Query<(&Transform, &Enemy)>,
     mut images: ResMut<Assets<Image>>,
+    time: Res<Time<Real>>,
+    mut next_at: Local<f32>,
 ) {
     if *phase.get() == super::Phase::Menu || !map.shown {
         return;
     }
+    // A CPU composite plus a texture upload: on the browser's one thread it was the single
+    // costliest survivors system per frame (~5 %), and the blips read the same at 12 Hz.
+    let now = time.elapsed_secs();
+    if now < *next_at {
+        return;
+    }
+    *next_at = now + 1.0 / 12.0;
     let (Some(mut assets), Some(catalog), Some(current)) = (assets, catalog, current) else {
         return;
     };

@@ -9,6 +9,7 @@ mod auto;
 mod cards;
 mod data;
 mod enemies;
+mod fill;
 mod framecap;
 mod grade;
 mod hero;
@@ -66,12 +67,15 @@ impl Plugin for SurvivorsPlugin {
             .add_message::<abilities::Hit>()
             .add_message::<enemies::Loot>()
             .add_plugins(bevy::ui_render::UiMaterialPlugin::<hud::SweepUiMaterial>::default())
+            .add_plugins(bevy::ui_render::UiMaterialPlugin::<fill::FillMaterial>::default())
             .add_systems(Startup, hud::setup_hud)
             .add_systems(Update, hero::daylight)
             // The frame's intents first (`input::collect`), then everything that reads them.
             .add_systems(
                 Update,
                 (
+                    // Stray buttons let go before the frame's intents are read from them.
+                    hero::drop_stray_buttons,
                     input::collect,
                     hero::aim_cursor,
                     mobility::cast_mobility,

@@ -30,7 +30,15 @@ pub fn tuned_default_plugins(mut primary_window: Window) -> PluginGroupBuilder {
         // Quiet wgpu/naga; the ring keeps the last stderr lines for the crash report (`log_ring`).
         .set(bevy::log::LogPlugin {
             filter: "wgpu=error,naga=warn".into(),
-            custom_layer: |_| Some(Box::new(crate::log_ring::LogRing)),
+            custom_layer: |_| {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    use bevy::log::tracing_subscriber::Layer as _;
+                    Some(Box::new(crate::log_ring::LogRing.and_then(NoSpans)))
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                Some(Box::new(crate::log_ring::LogRing))
+            },
             ..default()
         })
         // Asset loads parse synchronously on the IO pool, and Bevy's default 4 threads saturate on
@@ -82,3 +90,34 @@ pub fn tuned_default_plugins(mut primary_window: Window) -> PluginGroupBuilder {
         // No gamepad input; 1.12's bindings are keyboard/mouse.
         .disable::<bevy::gilrs::GilrsPlugin>()
 }
+
+/// The web build's tracing without spans. Bevy's wasm log layer turns every entered span into a
+/// `performance.mark` + `measure` pair with formatted names, unconditionally: about 5 % of the
+/// browser's main thread in a busy scene (profiled 2026-10-13), and User Timing entries that
+/// nothing ever clears. Disabling spans at the callsite keeps them from being built at all;
+/// events (the console log) are untouched.
+#[cfg(target_arch = "wasm32")]
+struct NoSpans;
+
+#[cfg(target_arch = "wasm32")]
+impl<S: bevy::log::tracing::Subscriber> bevy::log::tracing_subscriber::Layer<S> for NoSpans {
+    fn register_callsite(
+        &self,
+        meta: &'static bevy::log::tracing::Metadata<'static>,
+    ) -> bevy::log::tracing::subscriber::Interest {
+        if meta.is_span() {
+            bevy::log::tracing::subscriber::Interest::never()
+        } else {
+            bevy::log::tracing::subscriber::Interest::always()
+        }
+    }
+
+    fn enabled(
+        &self,
+        meta: &bevy::log::tracing::Metadata<'_>,
+        _: bevy::log::tracing_subscriber::layer::Context<'_, S>,
+    ) -> bool {
+        !meta.is_span()
+    }
+}
+
