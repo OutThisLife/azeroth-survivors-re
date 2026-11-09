@@ -27,7 +27,8 @@ android {
     // secrets (scripts/android-keystore.sh makes the key and names the secrets). A build without
     // them, a local `make android`, signs release with the debug key instead and says so: it
     // still installs, but not over a release-signed one.
-    val releaseKeystore = System.getenv("ANDROID_KEYSTORE_FILE")?.let { file(it) }?.takeIf { it.isFile }
+    // The workflow sets the variable to "" when it has no key: not a file, not an error.
+    val releaseKeystore = System.getenv("ANDROID_KEYSTORE_FILE")?.takeUnless { it.isEmpty() }?.let { file(it) }?.takeIf { it.isFile }
     val releaseSigned = releaseKeystore != null &&
         !System.getenv("ANDROID_KEYSTORE_PASSWORD").isNullOrEmpty() &&
         !System.getenv("ANDROID_KEY_ALIAS").isNullOrEmpty()
