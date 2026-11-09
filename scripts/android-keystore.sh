@@ -21,7 +21,17 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 KEYSTORE="${KEYSTORE:-$(pwd)/../android-release.jks}"
 ALIAS="${KEY_ALIAS:-azeroth-survivors}"
 
-command -v keytool >/dev/null || { echo "keytool not found: install a JDK (17 or newer)" >&2; exit 1; }
+# keytool ships with every JDK but is not always on the PATH (Oracle's Windows installer puts
+# java there through a shim folder without it): JAVA_HOME's bin is the second place to look.
+KEYTOOL=$(command -v keytool || true)
+[ -n "${KEYTOOL}" ] || [ -z "${JAVA_HOME:-}" ] || [ ! -x "${JAVA_HOME}/bin/keytool" ] || KEYTOOL="${JAVA_HOME}/bin/keytool"
+[ -n "${KEYTOOL}" ] || [ -z "${JAVA_HOME:-}" ] || [ ! -x "${JAVA_HOME}/bin/keytool.exe" ] || KEYTOOL="${JAVA_HOME}/bin/keytool.exe"
+if [ -z "${KEYTOOL}" ]; then
+  echo "keytool not found. It comes with a JDK (17 or newer): open a new terminal after installing one," >&2
+  echo "or point at it: PATH=\"/c/Program Files/Java/jdk-25/bin:\$PATH\" $0 (the folder your install made)," >&2
+  echo "or set JAVA_HOME to the JDK's folder." >&2
+  exit 1
+fi
 if [ -f "${KEYSTORE}" ]; then
   echo "${KEYSTORE} exists; not touching it. To start over, move it away first." >&2
   echo "To print the secrets for it again: KEYSTORE=${KEYSTORE} $0 --secrets" >&2
@@ -38,7 +48,7 @@ if [ "${1:-}" != "--secrets" ]; then
   # keytool's `:env` reads the process environment, not the shell's variables.
   export PASSWORD
   # 10000 days: Android requires validity past 2033 for an app that is to be updated for years.
-  keytool -genkeypair -v \
+  "${KEYTOOL}" -genkeypair -v \
     -keystore "${KEYSTORE}" -storetype PKCS12 -storepass:env PASSWORD -keypass:env PASSWORD \
     -alias "${ALIAS}" -keyalg RSA -keysize 4096 -validity 10000 \
     -dname "CN=Azeroth Survivors, OU=Android, O=azeroth-survivors-re"
