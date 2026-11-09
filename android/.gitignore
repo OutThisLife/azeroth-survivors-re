@@ -13,3 +13,7 @@
 /gradle/wrapper/gradle-wrapper.jar
 /gradlew
 /gradlew.bat
+# Signing keys live outside the repository (scripts/android-keystore.sh); the workflow reads
+# the release key from the repository's secrets.
+*.jks
+*.keystore

@@ -6,7 +6,10 @@
 #   scripts/android-build.sh              # android/app/build/outputs/apk/debug/app-debug.apk
 #   ANDROID_DEBUG=1 scripts/android-build.sh   # keep the symbols (ndk-stack reads them)
 #   ANDROID_PROFILE=ship scripts/android-build.sh   # fat LTO, as the desktop `ship` profile
-#   ANDROID_GRADLE_TASK=assembleRelease scripts/android-build.sh   # unsigned; sign with apksigner
+#   ANDROID_GRADLE_TASK=assembleRelease scripts/android-build.sh   # the release build type; signed
+#       with the release key when ANDROID_KEYSTORE_FILE/PASSWORD/KEY_ALIAS are set (what the
+#       release workflow does from the repository's secrets; scripts/android-keystore.sh makes
+#       the key), else with the debug key
 #
 # Then: adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 #       adb push /path/to/WoW/Data /sdcard/Android/data/io.github.songoku119.azerothsurvivors/files/Data

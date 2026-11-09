@@ -90,6 +90,15 @@ adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 make android-data        # fetches the data on this machine if needed, then adb pushes it to the phone
 ```
 
+Releases from the Actions tab (`android-release`, a tag like `android-v0.2.6`) are signed with one
+key, so each installs over the last with `adb install -r` and keeps the game data; the key comes
+from `scripts/android-keystore.sh`, once, and lives in the repository's secrets, never in it. A
+debug-signed build (`make android`, or a release before the key existed) cannot be replaced by a
+release-signed one, or the reverse: uninstall first, which removes the app's `Data` folder with
+it. To keep the data across that one uninstall, move it aside and back:
+`adb shell mv /sdcard/Android/data/io.github.songoku119.azerothsurvivors/files/Data /sdcard/Download/Data`
+before, the reverse after.
+
 The app looks for `Data` in its own external files folder, where `make android-data` puts it (no
 storage permission needed). Its launch screen says what is missing when it finds none, with a **Download**
 button that fetches the client from archive.org onto the phone instead, and shows the engine's

@@ -15,11 +15,34 @@ android {
         // 29: scoped storage and the Vulkan 1.1 floor the manifest's uses-feature asks for.
         minSdk = 29
         targetSdk = 34
-        versionCode = 6
-        versionName = "0.2.5"
+        versionCode = 7
+        versionName = "0.2.6"
         // Only the arm64 library is built (scripts/android-build.sh); no 32-bit or x86 slices.
         ndk {
             abiFilters += listOf("arm64-v8a")
+        }
+    }
+
+    // The release key, from the environment the release workflow sets out of the repository's
+    // secrets (scripts/android-keystore.sh makes the key and names the secrets). A build without
+    // them, a local `make android`, signs release with the debug key instead and says so: it
+    // still installs, but not over a release-signed one.
+    val releaseKeystore = System.getenv("ANDROID_KEYSTORE_FILE")?.let { file(it) }?.takeIf { it.isFile }
+    val releaseSigned = releaseKeystore != null &&
+        !System.getenv("ANDROID_KEYSTORE_PASSWORD").isNullOrEmpty() &&
+        !System.getenv("ANDROID_KEY_ALIAS").isNullOrEmpty()
+    signingConfigs {
+        create("release") {
+            if (releaseSigned) {
+                storeFile = releaseKeystore
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                // An absent Actions secret arrives as "", not null.
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")?.takeUnless { it.isEmpty() }
+                    ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                enableV2Signing = true
+                enableV3Signing = true
+            }
         }
     }
 
@@ -27,8 +50,15 @@ android {
         release {
             // Nothing to shrink: one activity class, the game is the .so.
             isMinifyEnabled = false
-            // Unsigned until the operator signs with apksigner (docs/ANDROID.md, P6).
+            signingConfig = if (releaseSigned) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+            // Debuggable on purpose for now: `adb shell run-as` reaches env.toml and the status
+            // file only in a debuggable app, and this is a sideloaded build for its own players.
+            // Flip to false for a build meant for strangers.
+            isDebuggable = true
         }
+    }
+    if (!releaseSigned) {
+        println("android: no ANDROID_KEYSTORE_FILE/PASSWORD/KEY_ALIAS in the environment; release is debug-signed (scripts/android-keystore.sh)")
     }
 
     // The .so arrives prebuilt in src/main/jniLibs from cargo-ndk; Gradle only packages it.
