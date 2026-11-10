@@ -35,6 +35,8 @@ mod device;
 #[cfg(not(target_os = "macos"))]
 #[path = "cpal.rs"]
 mod device;
+// Ours: the backgrounded app's stop (docs/UPSTREAM.md, "Android carries").
+mod suspend;
 
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -276,6 +278,8 @@ pub(super) struct OutputBackend {
     overloads_seen: u64,
     /// Errors the report counts: stream lost / open failed, since launch.
     stream_errors: u64,
+    /// Set by [`Self::set_suspended`]: the stream stays closed and `service` does not reopen it.
+    suspended: bool,
 }
 
 impl Backend for OutputBackend {
@@ -298,6 +302,7 @@ impl Backend for OutputBackend {
                 pending: Vec::new(),
                 overloads_seen: 0,
                 stream_errors: 0,
+                suspended: false,
             },
             sample_rate,
         ))
@@ -378,7 +383,7 @@ impl OutputBackend {
             }
         }
         if let Stage::Idle { since, .. } = &self.stage {
-            if since.elapsed() >= REOPEN_EVERY {
+            if !self.suspended && since.elapsed() >= REOPEN_EVERY {
                 match device::default_output() {
                     Ok(device) => {
                         if let Some(event) = self.open(device) {

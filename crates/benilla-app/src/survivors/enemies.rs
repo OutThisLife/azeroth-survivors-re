@@ -454,6 +454,7 @@ pub(super) fn collect_gems(
     time: Res<Time>,
     mut run: ResMut<Run>,
     mut next: ResMut<NextState<Phase>>,
+    input: Res<super::input::SurvivorsInput>,
     hero: Query<&Transform, (With<Hero>, Without<Gem>)>,
     mut gems: Query<(Entity, &mut Transform, &mut Gem)>,
 ) {
@@ -490,7 +491,9 @@ pub(super) fn collect_gems(
         run.pending_levels += 1;
         if run.level == super::mobility::LEARN_LEVEL {
             if let Some(m) = super::mobility::for_class(run.class.id) {
-                run.banner = Some((format!("You have learned {}! Press F.", m.name), 4.0));
+                let how =
+                    super::input::prompt(input.touch_active, "Press F", "Tap the spell button");
+                run.banner = Some((format!("You have learned {}! {}.", m.name, how), 4.0));
             }
         }
     }

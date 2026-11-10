@@ -2,10 +2,10 @@
 
 use benilla_world::view::WorldCamera;
 use benilla_world::world_point::WorldPoint;
-use bevy::input::mouse::{AccumulatedMouseMotion, MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 
 use super::data::{self, ClassDef};
+use super::input::SurvivorsInput;
 use super::units::{self, flat, wow_to_bevy, yaw_toward, Fx, Marks, UnitSpec};
 use super::{Phase, Run, Selection};
 use crate::creature_anim::{move_flags, MovementState};
@@ -139,22 +139,23 @@ pub(super) fn daylight(debug: Option<ResMut<benilla_world::dev_state::DebugState
     }
 }
 
-/// The ground under the mouse cursor, `None` with the cursor off the window. The locked camera's
-/// hero faces it, and the aimed mobility spells (Blink, Charge) go toward it.
+/// The ground under the aim point ([`SurvivorsInput::aim`]: the mouse cursor, or the last touch
+/// that aimed), `None` with the cursor off the window or no touch yet. The locked camera's hero
+/// faces it, and the aimed mobility spells (Blink, Charge) go toward it.
 #[derive(Resource, Default)]
 pub(super) struct AimPoint(pub(super) Option<Vec3>);
 
-/// Cast the cursor onto the terrain: the camera ray meets the plane at the hero's height, then the
-/// terrain height there, a few times over, which settles on hills within a frame.
+/// Cast the aim point onto the terrain: the camera ray meets the plane at the hero's height, then
+/// the terrain height there, a few times over, which settles on hills within a frame.
 pub(super) fn aim_cursor(
-    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
+    input: Res<SurvivorsInput>,
     cams: Query<(&Camera, &Transform), With<WorldCamera>>,
     hero: Query<&Transform, (With<Hero>, Without<WorldCamera>)>,
     world: WorldPoint,
     mut aim: ResMut<AimPoint>,
 ) {
     let point = (|| {
-        let cursor = windows.single().ok()?.cursor_position()?;
+        let cursor = input.aim?;
         let (cam, tf) = cams.single().ok()?;
         let ray = cam
             .viewport_to_world(&GlobalTransform::from(*tf), cursor)
@@ -183,11 +184,12 @@ pub(super) fn aim_cursor(
     }
 }
 
-/// WASD over the terrain within the battleground's leash, and the streaming focus on the hero.
+/// WASD (or the joystick) over the terrain within the battleground's leash, and the streaming
+/// focus on the hero.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn drive_hero(
     time: Res<Time>,
-    keys: Res<ButtonInput<KeyCode>>,
+    input: Res<SurvivorsInput>,
     phase: Res<State<Phase>>,
     run: Res<Run>,
     selection: Res<Selection>,
@@ -208,18 +210,8 @@ pub(super) fn drive_hero(
             {
                 dir = super::auto::steer(auto);
             } else if *phase.get() == Phase::Playing && run.dead_t.is_none() {
-                if keys.any_pressed([KeyCode::KeyW, KeyCode::ArrowUp]) {
-                    dir.z -= 1.0;
-                }
-                if keys.any_pressed([KeyCode::KeyS, KeyCode::ArrowDown]) {
-                    dir.z += 1.0;
-                }
-                if keys.any_pressed([KeyCode::KeyA, KeyCode::ArrowLeft]) {
-                    dir.x -= 1.0;
-                }
-                if keys.any_pressed([KeyCode::KeyD, KeyCode::ArrowRight]) {
-                    dir.x += 1.0;
-                }
+                // Screen up is world -z; the joystick's length (under 1) is a walking pace.
+                dir = Vec3::new(input.mov.x, 0.0, input.mov.y);
                 // In orbit mode WASD is camera-relative; in fixed mode it stays world-relative.
                 if rig.mode == CamMode::Orbit {
                     let (sy, cy) = rig.yaw.sin_cos();
@@ -242,8 +234,9 @@ pub(super) fn drive_hero(
                 tf.rotation = tf.rotation.slerp(target, (dt * 20.0).min(1.0));
             }
             if dir != Vec3::ZERO && dt > 0.0 {
+                let pace = dir.length().min(1.0);
                 let dir = dir.normalize();
-                let speed = run.stats().speed * run.haste_mult();
+                let speed = run.stats().speed * run.haste_mult() * pace;
                 pos += dir * speed * dt;
                 mv.speed = speed;
                 mv.flags = match face {
@@ -271,8 +264,9 @@ pub(super) fn drive_hero(
             }
             let ground = world.terrain_height_under(pos).unwrap_or(pos.y);
             let playing = *phase.get() == Phase::Playing && run.dead_t.is_none();
-            // Space hops: lift off the terrain, then gravity brings the hero back down.
-            if playing && keys.just_pressed(KeyCode::Space) && hm.vy == 0.0 && hm.air == 0.0 {
+            // Space (or the jump button) hops: lift off the terrain, then gravity brings the hero
+            // back down.
+            if playing && input.jump && hm.vy == 0.0 && hm.air == 0.0 {
                 hm.vy = JUMP_SPEED;
             }
             if playing && (hm.vy != 0.0 || hm.air > 0.0) {
@@ -335,18 +329,15 @@ pub(super) fn place_camera(
     time: Res<Time<Real>>,
     phase: Res<State<Phase>>,
     mut rig: ResMut<CamRig>,
-    mut wheel: MessageReader<MouseWheel>,
-    mouse: Res<ButtonInput<MouseButton>>,
-    motion: Res<AccumulatedMouseMotion>,
-    keys: Res<ButtonInput<KeyCode>>,
+    input: Res<SurvivorsInput>,
     player: Res<crate::player::Player>,
     world: WorldPoint,
     hero: Query<&Transform, (With<Hero>, Without<WorldCamera>)>,
     mut cams: Query<&mut Transform, With<WorldCamera>>,
 ) {
-    // `C` unlocks the camera to swing and tilt; locking it again snaps back to the top-down view,
-    // so world-relative WASD lines up with the screen again.
-    if keys.just_pressed(KeyCode::KeyC) {
+    // `C` (or the pause panel's toggle) unlocks the camera to swing and tilt; locking it again
+    // snaps back to the top-down view, so world-relative WASD lines up with the screen again.
+    if input.camera_toggle {
         rig.mode = match rig.mode {
             CamMode::Fixed => CamMode::Orbit,
             CamMode::Orbit => {
@@ -358,14 +349,10 @@ pub(super) fn place_camera(
     }
     // With no hero yet, the focus `drive_hero` grounded.
     let focus = hero.single().map_or(player.pos, |t| t.translation);
-    // Multiplicative, so a notch moves as far by eye close in as far out; all the way down to an
-    // over-the-shoulder view.
-    for w in wheel.read() {
-        let notches = match w.unit {
-            MouseScrollUnit::Line => w.y,
-            MouseScrollUnit::Pixel => w.y * 0.02,
-        };
-        rig.dist = (rig.dist * (1.0 - 0.12 * notches).clamp(0.5, 1.5)).clamp(ZOOM_MIN, ZOOM_MAX);
+    // Multiplicative (the wheel's notches, or a pinch), so a step moves as far by eye close in as
+    // far out; all the way down to an over-the-shoulder view.
+    if input.zoom != 1.0 {
+        rig.dist = (rig.dist * input.zoom).clamp(ZOOM_MIN, ZOOM_MAX);
     }
     let (eye, look) = if *phase.get() == Phase::Menu {
         rig.orbit += time.delta_secs() * 0.2;
@@ -375,11 +362,11 @@ pub(super) fn place_camera(
             focus + Vec3::Y * 1.1,
         )
     } else {
-        // Unlocked, either mouse button drags the camera around the hero, as in WoW.
-        if rig.mode == CamMode::Orbit && mouse.any_pressed([MouseButton::Left, MouseButton::Right])
-        {
-            rig.yaw -= motion.delta.x * ORBIT_RATE;
-            rig.pitch = (rig.pitch + motion.delta.y * ORBIT_RATE).clamp(PITCH_MIN, PITCH_MAX);
+        // Unlocked, either mouse button (or two fingers) drags the camera around the hero, as in
+        // WoW.
+        if rig.mode == CamMode::Orbit && input.orbit != Vec2::ZERO {
+            rig.yaw -= input.orbit.x * ORBIT_RATE;
+            rig.pitch = (rig.pitch + input.orbit.y * ORBIT_RATE).clamp(PITCH_MIN, PITCH_MAX);
         }
         let (sy, cy) = rig.yaw.sin_cos();
         let (sp, cp) = rig.pitch.sin_cos();

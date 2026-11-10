@@ -74,6 +74,37 @@ See [CONTROLS.md](CONTROLS.md). The short version: **WASD** to move, **Space** t
 for your class's movement spell, the **mouse wheel** to zoom, **C** to unlock the camera, **Esc**
 to pause, **1/2/3** to pick a level-up card.
 
+## Play it on Android
+
+**Experimental, untested on a device.** The Android build (docs/ANDROID.md) is a sideloaded
+APK of the survivors mode, touch-controlled (CONTROLS.md, "Touch"), that reads a WoW 1.12.1
+`Data` folder you put on the phone yourself. It ships no data and is on no store. Nothing here
+has yet been run on a real phone; the Rust side type-checks for the Android target in CI, the
+APK itself is yours to build and try.
+
+```bash
+export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/<r28 or newer>   # Android Studio's SDK Manager installs one
+make android-toolchain   # rustup target, cargo-ndk; checks the NDK and the lockfile
+make android             # → android/app/build/outputs/apk/debug/app-debug.apk (needs an SDK, platform 34)
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+make android-data        # fetches the data on this machine if needed, then adb pushes it to the phone
+```
+
+Releases from the Actions tab (`android-release`, a tag like `android-v0.2.6`) are signed with one
+key, so each installs over the last with `adb install -r` and keeps the game data; the key comes
+from `scripts/android-keystore.sh`, once, and lives in the repository's secrets, never in it. A
+debug-signed build (`make android`, or a release before the key existed) cannot be replaced by a
+release-signed one, or the reverse: uninstall first, which removes the app's `Data` folder with
+it. To keep the data across that one uninstall, move it aside and back:
+`adb shell mv /sdcard/Android/data/io.github.songoku119.azerothsurvivors/files/Data /sdcard/Download/Data`
+before, the reverse after.
+
+The app looks for `Data` in its own external files folder, where `make android-data` puts it (no
+storage permission needed). Its launch screen says what is missing when it finds none, with a **Download**
+button that fetches the client from archive.org onto the phone instead, and shows the engine's
+progress until the pick screen is up. Vulkan 1.1 and Android 10+ (arm64) are required; `adb logcat -s wsurvivors:*
+wgpu:*` is where it reports.
+
 ## The game data (not in this repo)
 
 This repo ships **no Blizzard content** — no art, models, sounds, maps, MPQ contents, or
@@ -95,7 +126,12 @@ make build WOW_DATA_URL=https://your-mirror.example/client.zip
 
 Or set it permanently by editing the single clearly-marked `DEFAULT_DATA_URL` line at the top of
 `scripts/fetch-data.sh`. Either way the URL must be a direct link to a zip holding the client's
-`Data/*.MPQ` files.
+`Data/*.MPQ` files, at any depth.
+
+When the default download fails, the script falls back to archive.org's whole-item zip of the
+same item (`DEFAULT_FALLBACK_URL`). That zip is built on the fly, so it cannot resume, and it may
+wrap the client zip inside it; the script unpacks the inner zip when it does. `WOW_DATA_FALLBACK_URL=`
+(empty) turns the fallback off, and a `WOW_DATA_URL` you set gets none.
 
 ## How it's built
 

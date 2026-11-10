@@ -13,12 +13,18 @@ use bevy::window::PrimaryWindow;
 
 use super::data::{self, AbilityDef, Effect, Kind, PassiveDef, Stat};
 use super::hero::{self, Hero};
+use super::input::{self, KeyHint, SurvivorsInput, TouchOnly, TouchWidget};
 use super::minimap::{self, MiniMap};
 use super::{Owned, Phase, Rng, Run, Selection, Stats};
 
 const GOLD: Color = Color::srgb(1.0, 0.82, 0.0);
 /// The mobility button's edge, an action button's 36 units.
 const MOBILITY_SIZE: f32 = 40.0;
+/// The on-screen touch buttons' edge in units at `UiScale` 1; on touch layout every one of them
+/// grows to [`touch_units`] so it is 48 dp whatever the scale.
+const TOUCH_BUTTON: f32 = 48.0;
+/// The touch buttons' inset from the screen's edge, in units.
+const TOUCH_PAD: f32 = 24.0;
 const EDGE: Color = Color::srgb(0.55, 0.45, 0.25);
 const BUTTON: Color = Color::srgba(0.18, 0.06, 0.04, 0.95);
 const BUTTON_HOT: Color = Color::srgba(0.36, 0.12, 0.06, 0.98);
@@ -98,6 +104,14 @@ pub(super) struct AbilitySweep {
 pub(super) struct MobilitySlot;
 #[derive(Component)]
 pub(super) struct MobilityIcon;
+/// The joystick's base ring and its knob, placed under the thumb on touch layout.
+#[derive(Component)]
+pub(super) struct JoystickBase;
+#[derive(Component)]
+pub(super) struct JoystickKnob;
+/// A pause-panel toggle's label, refreshed from what it toggles.
+#[derive(Component)]
+pub(super) struct ToggleLabel(UiAction);
 #[derive(Component)]
 pub(super) struct MobilitySweep(Handle<SweepUiMaterial>);
 #[derive(Component)]
@@ -164,6 +178,9 @@ pub(super) enum UiAction {
     Resume,
     MainMenu,
     Quit,
+    /// The pause panel's stand-ins for `C` and `G` on touch layout.
+    CamToggle,
+    GradeToggle,
 }
 
 /// The colour a button returns to when not hovered.
@@ -410,25 +427,29 @@ pub(super) fn setup_hud(
                 },
             ))
             .with_children(|col| {
-                col.spawn(centered(f, "F", 18.0, Color::WHITE));
+                col.spawn((KeyHint, centered(f, "F", 18.0, Color::WHITE)));
+                // A `Button` too: on touch layout it grows to a thumb's size and a touch on it
+                // casts (`input::collect`).
                 col.spawn((
+                    Button,
+                    TouchWidget::Mobility,
                     Node {
                         width: Val::Px(MOBILITY_SIZE),
                         height: Val::Px(MOBILITY_SIZE),
                         ..default()
                     },
-                    Interaction::default(),
                     TipFor::Mobility,
                 ))
                 .with_children(|slot| {
-                    // `UI-Quickslot2` is the empty slot's 64×64 frame, the button 36 inside it.
+                    // `UI-Quickslot2` is the empty slot's 64×64 frame, the button 36 inside it;
+                    // in percent of the slot so it follows the touch size.
                     slot.spawn((
                         Node {
                             position_type: PositionType::Absolute,
-                            left: Val::Px(-MOBILITY_SIZE * 0.42),
-                            top: Val::Px(-MOBILITY_SIZE * 0.42),
-                            width: Val::Px(MOBILITY_SIZE * 1.84),
-                            height: Val::Px(MOBILITY_SIZE * 1.84),
+                            left: Val::Percent(-42.0),
+                            top: Val::Percent(-42.0),
+                            width: Val::Percent(184.0),
+                            height: Val::Percent(184.0),
                             ..default()
                         },
                         ImageNode {
@@ -462,6 +483,57 @@ pub(super) fn setup_hud(
                     ));
                 });
             });
+            // The touch controls, laid out only once a touch has been seen (`touch_layout`):
+            // the joystick's ring and knob under the thumb, Jump above the mobility slot at the
+            // bottom right, pause left of the minimap.
+            root.spawn((
+                JoystickBase,
+                TouchOnly,
+                Node {
+                    position_type: PositionType::Absolute,
+                    display: Display::None,
+                    border: UiRect::all(Val::Px(2.0)),
+                    border_radius: BorderRadius::MAX,
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.08)),
+                BorderColor::all(Color::srgba(1.0, 1.0, 1.0, 0.35)),
+                bevy::ui::FocusPolicy::Pass,
+            ))
+            .with_children(|base| {
+                base.spawn((
+                    JoystickKnob,
+                    Node {
+                        position_type: PositionType::Absolute,
+                        border_radius: BorderRadius::MAX,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.45)),
+                ));
+            });
+            for (widget, label) in [(TouchWidget::Jump, "Jump"), (TouchWidget::Pause, "II")] {
+                root.spawn((
+                    widget,
+                    TouchOnly,
+                    Button,
+                    Node {
+                        position_type: PositionType::Absolute,
+                        display: Display::None,
+                        width: Val::Px(TOUCH_BUTTON),
+                        height: Val::Px(TOUCH_BUTTON),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(2.0)),
+                        border_radius: BorderRadius::MAX,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.45)),
+                    BorderColor::all(EDGE),
+                ))
+                .with_children(|b| {
+                    b.spawn(centered(f, label, 16.0, Color::WHITE));
+                });
+            }
             root.spawn(Node {
                 width: Val::Percent(100.0),
                 padding: UiRect::all(Val::Px(10.0)),
@@ -708,7 +780,13 @@ pub(super) fn setup_hud(
                     ..default()
                 },
             ));
-            root.spawn(centered(f, "Click a card, or press 1, 2 or 3", 14.0, DIM));
+            root.spawn((
+                input::Prompt {
+                    key: "Click a card, or press 1, 2 or 3",
+                    touch: "Tap a card",
+                },
+                centered(f, "Click a card, or press 1, 2 or 3", 14.0, DIM),
+            ));
         });
 
     // --- Pause. ---
@@ -750,6 +828,25 @@ pub(super) fn setup_hud(
                 ))
                 .with_children(|b| {
                     b.spawn(text(f, label, 20.0, Color::WHITE));
+                });
+            }
+            // `C` and `G` have no key on a phone: the toggles stand in, on touch layout only.
+            for action in [UiAction::CamToggle, UiAction::GradeToggle] {
+                root.spawn((
+                    button(action, BUTTON),
+                    TouchOnly,
+                    Node {
+                        display: Display::None,
+                        width: Val::Px(240.0),
+                        justify_content: JustifyContent::Center,
+                        padding: UiRect::axes(Val::Px(20.0), Val::Px(8.0)),
+                        border: UiRect::all(Val::Px(2.0)),
+                        border_radius: BorderRadius::all(Val::Px(4.0)),
+                        ..default()
+                    },
+                ))
+                .with_children(|b| {
+                    b.spawn((ToggleLabel(action), text(f, "", 16.0, Color::WHITE)));
                 });
             }
         });
@@ -1027,6 +1124,7 @@ pub(super) fn buttons(
     mut next: ResMut<NextState<Phase>>,
     mut exit: MessageWriter<AppExit>,
     phase: Res<State<Phase>>,
+    mut input: ResMut<SurvivorsInput>,
 ) {
     for (interaction, action, base, mut bg) in &mut presses {
         match interaction {
@@ -1040,6 +1138,9 @@ pub(super) fn buttons(
                     (UiAction::Quit, Phase::Paused | Phase::GameOver) => {
                         exit.write(AppExit::Success);
                     }
+                    // The camera and grade systems ran before this frame's buttons: next frame.
+                    (UiAction::CamToggle, Phase::Paused) => input.queued.camera_toggle = true,
+                    (UiAction::GradeToggle, Phase::Paused) => input.queued.grade_toggle = true,
                     _ => {}
                 }
             }
@@ -1047,35 +1148,72 @@ pub(super) fn buttons(
     }
 }
 
+/// The pause panel's toggles say what they stand at.
+pub(super) fn refresh_toggles(
+    rig: Res<hero::CamRig>,
+    grade: Res<super::grade::GradeOn>,
+    mut labels: Query<(&ToggleLabel, &mut Text)>,
+) {
+    for (label, mut text) in &mut labels {
+        let want = match label.0 {
+            UiAction::CamToggle => match rig.mode {
+                hero::CamMode::Fixed => "Camera: locked",
+                hero::CamMode::Orbit => "Camera: free",
+            },
+            UiAction::GradeToggle if grade.0 => "Picture polish: on",
+            UiAction::GradeToggle => "Picture polish: off",
+            _ => continue,
+        };
+        if text.0 != want {
+            text.0 = want.to_string();
+        }
+    }
+}
+
+/// `Enter`, `Esc` (or the pause button) and Android's Back, which pauses as `Esc` does and at the
+/// menu exits on a second press within [`input::BACK_EXIT_SECS`].
 pub(super) fn keys(
-    keys: Res<ButtonInput<KeyCode>>,
+    input: Res<SurvivorsInput>,
+    time: Res<Time<Real>>,
     phase: Res<State<Phase>>,
     mut selection: ResMut<Selection>,
     mut run: ResMut<Run>,
     mut next: ResMut<NextState<Phase>>,
+    mut exit: MessageWriter<AppExit>,
+    mut back_at: Local<Option<f32>>,
 ) {
     match phase.get() {
         Phase::Menu => {
-            if keys.just_pressed(KeyCode::Enter) && start_run(&mut run, &mut selection) {
+            if input.confirm && start_run(&mut run, &mut selection) {
                 next.set(Phase::Playing);
+            }
+            if input.back {
+                let now = time.elapsed_secs();
+                if back_at.is_some_and(|t| now - t <= input::BACK_EXIT_SECS) {
+                    exit.write(AppExit::Success);
+                }
+                *back_at = Some(now);
             }
         }
         Phase::Playing => {
-            if keys.just_pressed(KeyCode::Escape) {
+            if input.pause {
                 next.set(Phase::Paused);
             }
         }
         Phase::Paused => {
-            if keys.just_pressed(KeyCode::Escape) {
+            if input.pause {
                 next.set(Phase::Playing);
             }
         }
         Phase::LevelUp => {}
         Phase::GameOver => {
-            if keys.just_pressed(KeyCode::Enter) {
+            if input.confirm {
                 next.set(Phase::Menu);
             }
         }
+    }
+    if *phase.get() != Phase::Menu {
+        *back_at = None;
     }
 }
 
@@ -1216,6 +1354,7 @@ pub(super) fn refresh_hud(
     phase: Res<State<Phase>>,
     mut run: ResMut<Run>,
     selection: Res<Selection>,
+    input: Res<SurvivorsInput>,
     font: Res<HudFont>,
     mut texts: ParamSet<(
         Query<&mut Text, With<LevelText>>,
@@ -1287,10 +1426,15 @@ pub(super) fn refresh_hud(
         **t = title;
     }
     let summary = format!(
-        "{} {} in {}   —   press Enter to play again",
+        "{} {} in {}   —   {}",
         crate::char_select::race_name(run.race),
         run.class.name,
         selection.map_def().name,
+        input::prompt(
+            input.touch_active,
+            "press Enter to play again",
+            "tap Play again",
+        ),
     );
     if let Ok(mut t) = texts.p5().single_mut() {
         if **t != summary {
@@ -1495,6 +1639,139 @@ pub(super) fn apply_ui_scale(
     let want = window.height() / 768.0;
     if want > 0.0 && (scale.0 - want).abs() > 1e-4 {
         scale.0 = want;
+    }
+}
+
+/// A touch target's edge in units: 48 logical pixels (dp on a phone) at the current scale, never
+/// smaller than the desktop size it replaces.
+pub(super) fn touch_units(scale: f32, desktop: f32) -> f32 {
+    if scale > 0.0 {
+        (48.0 / scale).max(desktop)
+    } else {
+        desktop
+    }
+}
+
+/// Sets one of a node's `Val`s, touching the node (and so the layout) only on a real change.
+pub(super) fn set_val(node: &mut Mut<Node>, field: impl Fn(&mut Node) -> &mut Val, want: Val) {
+    if *field(node.bypass_change_detection()) != want {
+        *field(node) = want;
+    }
+}
+
+fn set_display(node: &mut Mut<Node>, on: bool) {
+    let want = if on { Display::Flex } else { Display::None };
+    if node.display != want {
+        node.display = want;
+    }
+}
+
+/// The touch layout: the on-screen controls appear once a touch has been seen and leave on a key,
+/// every touch button is sized to 48 dp from the `UiScale`, the mobility slot moves under the
+/// right thumb with Jump above it, and the joystick's ring follows the left thumb.
+#[allow(clippy::type_complexity)]
+pub(super) fn touch_layout(
+    input: Res<SurvivorsInput>,
+    scale: Res<UiScale>,
+    mut nodes: Query<
+        (
+            &mut Node,
+            Option<&TouchOnly>,
+            Option<&KeyHint>,
+            Option<&TouchWidget>,
+            Option<&MobilitySlot>,
+            Option<&JoystickBase>,
+            Option<&JoystickKnob>,
+        ),
+        Or<(
+            With<TouchOnly>,
+            With<KeyHint>,
+            With<TouchWidget>,
+            With<MobilitySlot>,
+            With<JoystickBase>,
+            With<JoystickKnob>,
+        )>,
+    >,
+) {
+    let on = input.touch_active;
+    let s = scale.0.max(1e-3);
+    let unit = touch_units(s, TOUCH_BUTTON);
+    let mobility = if on {
+        touch_units(s, MOBILITY_SIZE)
+    } else {
+        MOBILITY_SIZE
+    };
+    let px = Val::Px;
+    for (mut node, touch_only, hint, widget, slot, base, knob) in &mut nodes {
+        // Every write below compares first; the layout recomputes only on a real change.
+        if touch_only.is_some() && base.is_none() {
+            set_display(&mut node, on);
+        }
+        if hint.is_some() {
+            set_display(&mut node, !on);
+        }
+        match widget {
+            Some(TouchWidget::Mobility) => {
+                set_val(&mut node, |n| &mut n.width, px(mobility));
+                set_val(&mut node, |n| &mut n.height, px(mobility));
+            }
+            Some(TouchWidget::Jump) => {
+                set_val(&mut node, |n| &mut n.width, px(unit));
+                set_val(&mut node, |n| &mut n.height, px(unit));
+                set_val(&mut node, |n| &mut n.right, px(TOUCH_PAD));
+                set_val(&mut node, |n| &mut n.bottom, px(TOUCH_PAD + mobility * 1.3));
+            }
+            Some(TouchWidget::Pause) => {
+                set_val(&mut node, |n| &mut n.width, px(unit));
+                set_val(&mut node, |n| &mut n.height, px(unit));
+                set_val(&mut node, |n| &mut n.right, px(200.0));
+                set_val(&mut node, |n| &mut n.top, px(10.0));
+            }
+            None => {}
+        }
+        if slot.is_some() {
+            // Centred at the bottom on the desktop; under the right thumb on touch.
+            let (left, right, margin) = if on {
+                (Val::Auto, px(TOUCH_PAD + mobility * 1.3), UiRect::DEFAULT)
+            } else {
+                (
+                    Val::Percent(50.0),
+                    Val::Auto,
+                    UiRect::left(px(-MOBILITY_SIZE / 2.0)),
+                )
+            };
+            set_val(&mut node, |n| &mut n.left, left);
+            set_val(&mut node, |n| &mut n.right, right);
+            if node.margin != margin {
+                node.margin = margin;
+            }
+        }
+        if base.is_some() {
+            // The ring spans the full-deflection circle, in units from logical pixels.
+            let d = 2.0 * input::STICK_RADIUS / s;
+            match input.joystick.filter(|_| on) {
+                Some((origin, _)) => {
+                    set_display(&mut node, true);
+                    set_val(&mut node, |n| &mut n.left, px(origin.x / s - d / 2.0));
+                    set_val(&mut node, |n| &mut n.top, px(origin.y / s - d / 2.0));
+                    set_val(&mut node, |n| &mut n.width, px(d));
+                    set_val(&mut node, |n| &mut n.height, px(d));
+                }
+                None => set_display(&mut node, false),
+            }
+        }
+        if knob.is_some() {
+            let d = 0.7 * input::STICK_RADIUS / s;
+            if let Some((origin, at)) = input.joystick {
+                // Inside the ring's border, from its content box's corner.
+                let off = (at - origin) / s;
+                let r = input::STICK_RADIUS / s - 2.0;
+                set_val(&mut node, |n| &mut n.left, px(r + off.x - d / 2.0));
+                set_val(&mut node, |n| &mut n.top, px(r + off.y - d / 2.0));
+            }
+            set_val(&mut node, |n| &mut n.width, px(d));
+            set_val(&mut node, |n| &mut n.height, px(d));
+        }
     }
 }
 
@@ -2078,8 +2355,11 @@ pub(super) fn icon_tooltip(
         &bevy::ui::UiGlobalTransform,
     )>,
     mut frames: Query<(&mut Node, &mut Visibility), With<GameTooltip>>,
+    input: Res<SurvivorsInput>,
+    time: Res<Time<Real>>,
     mut built: Local<Option<(Entity, Entity)>>,
     mut shown: Local<Option<(TipFor, u32)>>,
+    mut held: Local<Option<(TipFor, f32)>>,
 ) {
     let Some((frame, body)) = *built else {
         if let Some(assets) = assets.as_deref_mut() {
@@ -2099,6 +2379,17 @@ pub(super) fn icon_tooltip(
         .iter()
         .find(|(i, ..)| **i != Interaction::None)
         .filter(|_| *phase.get() != Phase::Menu);
+    // On touch there is no hover: the tip shows once a finger has rested on the icon a while.
+    let hovered = if input.touch_active {
+        *held = hovered.map(|(_, &tip, ..)| match *held {
+            Some((was, t)) if was == tip => (tip, t + time.delta_secs()),
+            _ => (tip, 0.0),
+        });
+        hovered.filter(|_| held.is_some_and(|(_, t)| t >= input::LONG_PRESS_SECS))
+    } else {
+        *held = None;
+        hovered
+    };
     let Some((_, &tip, computed, at)) = hovered else {
         if *vis != Visibility::Hidden {
             *vis = Visibility::Hidden;
@@ -2135,8 +2426,11 @@ pub(super) fn icon_tooltip(
         TipFor::Mobility => run.mobility().map(|m| {
             vec![
                 TipLine::new(spell_name(spells.as_deref(), m.spell, m.name), Color::WHITE).header(),
-                TipLine::new("Press F", Color::WHITE)
-                    .right(format!("{} sec cooldown", num(m.cooldown)), Color::WHITE),
+                TipLine::new(
+                    input::prompt(input.touch_active, "Press F", "Tap to cast"),
+                    Color::WHITE,
+                )
+                .right(format!("{} sec cooldown", num(m.cooldown)), Color::WHITE),
                 TipLine::new(m.desc, GOLD),
             ]
         }),

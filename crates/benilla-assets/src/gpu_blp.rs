@@ -11,6 +11,9 @@ use bevy::image::{CompressedImageFormatSupport, CompressedImageFormats};
 use bevy::prelude::*;
 use bevy::render::render_resource::TextureFormat;
 
+// Ours: `WOW_MIP_DROP` on the decoded path (docs/UPSTREAM.md, "Android carries").
+mod mip_drop;
+
 static BC_SUPPORTED: OnceLock<bool> = OnceLock::new();
 
 /// Publish whether this run's GPU accepts BC, once, from a plugin's `finish()`. A `OnceLock`, not
@@ -83,7 +86,7 @@ pub fn for_upload(chain: BlpMipChain) -> UploadChain {
     }
     // `into_rgba8` is a no-op on pixels and an infallible decode of blocks.
     UploadChain {
-        chain: chain.into_rgba8(),
+        chain: mip_drop::drop_top_mips(chain, mip_drop::mip_drop()).into_rgba8(),
         format: TextureFormat::Rgba8Unorm,
     }
 }

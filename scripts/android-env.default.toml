@@ -1,0 +1,37 @@
+# The Android preset: what the launcher's env shim seeds into `<filesDir>/benilla-config/env.toml`
+# on first run, compiled in as `env_shim::DEFAULT_ENV_TOML` (docs/ANDROID.md, P1 "Env shim" and P2
+# "Presets"). Every key is a `WOW_*` lever the client already reads off its process environment at
+# startup, so the shim does `set_var` per line and no client code knows it is on a phone. The values are the P2 starting point for the Mali
+# gate (30 fps for 10 minutes in Elwynn and Naxxramas, RSS under 1.5 GB); a High preset lifts them.
+#
+# The readers, for the names and the units:
+#   WOW_FARCLIP         benilla-world/src/view.rs      `ViewDistance::default`, yards, clamped 177..=777 (default 350)
+#   WOW_RENDER_SCALE    benilla-app/src/world_backdrop.rs `RenderScale::default`, 0.25..=4.0 (default 1.0)
+#   WOW_MSAA            benilla-world/src/view.rs      `MsaaSetting::default`, "off"/0/1 = none, else samples (default 1)
+#   WOW_CLUTTER_DENSITY benilla-world/src/clutter.rs   `ClutterConfig::default`, ground clutter multiplier, 0 = off (default 2.0)
+#   WOW_ANISO           benilla-assets/src/tex_filter.rs `TexFilterSetting::default`, 1..=16 (default 1)
+#   WOW_TRILINEAR       benilla-assets/src/tex_filter.rs 0/off or 1 (default 1)
+#   WOW_GRADE           benilla-app/src/survivors/grade.rs  0 turns the fullscreen colour grade off
+#   WOW_FPS_CAP         benilla-app/src/survivors/framecap.rs  frame limiter, Hz; unset = display refresh
+#   WOW_MIP_DROP        benilla-assets/src/gpu_blp.rs  top mips dropped on the RGBA8 (no-BC) path, chains wider than 512
+#
+# `session_values` (benilla-app/src/cvars/mod.rs) marks a lever's CVar row as session-owned, so
+# none of these is written back into `config.toml`; the player's own Video panel changes still
+# save for the CVars that have no lever.
+
+WOW_FARCLIP = "300"
+WOW_RENDER_SCALE = "0.8"
+WOW_MSAA = "off"
+WOW_CLUTTER_DENSITY = "1"
+WOW_ANISO = "2"
+WOW_TRILINEAR = "1"
+WOW_GRADE = "0"
+WOW_FPS_CAP = "30"
+WOW_MIP_DROP = "1"
+
+# `spellEffectLevel` has no env lever: it is a `config.toml` CVar (`benilla-app/src/cvars/table.rs`,
+# registered "2"; the handler's levels are 0, 1, 2 for 0.33/0.66/1.0 emission). The shim does not
+# seed it yet (open in docs/ANDROID.md); by hand, in `<filesDir>/benilla-config/config.toml`:
+#
+#   [cvars]
+#   spellEffectLevel = "1"

@@ -15,6 +15,11 @@ changing client code, and treat this file as authoritative for the fork's crates
 | path | what | whose |
 |---|---|---|
 | `crates/benilla-*` | the client: formats, world, UI, protocol, app | upstream's, plus our `#[cfg]`-gated carries |
+| `crates/benilla-app/src/survivors/` | the survivors mode: the pick screen, hero, enemies, cards, touch input (`input.rs`), lifecycle, frame cap, the no-data panel | this repository's own code, inside upstream's crate; cfg-free changes are fine |
+| `crates/warcraft-survivors` | the native desktop launcher (`cargo survivors`) | this repository's |
+| `crates/warcraft-survivors-android` | the Android launcher: `GameActivity` cdylib, env shim (`BENILLA_HOME`, `WOW_DATA`, `env.toml`), panic hook to logcat | this repository's; see docs/ANDROID.md |
+| `android/` | the Gradle project that packages the cdylib into an APK (`MainActivity : GameActivity`) | this repository's; no Rust here |
+| `scripts/android-setup.sh`, `scripts/android-build.sh`, `scripts/android-data.sh`, `scripts/android-env.default.toml` | toolchain and build for the APK, putting the game data on a phone over adb, and the `env.toml` preset the shim seeds on first run | this repository's |
 | `crates/benilla-app/src/webbridge/` | the JavaScript bridge, wasm side | ours |
 | `crates/wenilla` | the wasm entry crate (`#[wasm_bindgen(start)]`) | ours |
 | `crates/wenilla-host` | local dev server: static files, `/data/*`, `/ws/*` relay. Loopback only. | ours |
@@ -23,7 +28,7 @@ changing client code, and treat this file as authoritative for the fork's crates
 | `web/` | the page side: `index.html` (dev page), `boot.js`, `platform.js`, `bridge.js`, `examples/`, `wasi_stubs.js` | ours |
 | `scripts/web-setup.sh`, `scripts/web-build.sh` | toolchain and build for the wasm | ours |
 | `third_party/mlua-sys` | Lua 5.1's C build for wasm | ours (vendored) |
-| `.github/workflows/check.yml` | the PR gate: wasm check + realm tests | ours |
+| `.github/workflows/check.yml` | the PR gate: wasm check, Android check, realm tests | ours |
 | `.github/workflows/bump-realm-pin.yml` | tells wenilla-realm about every new `main` head | ours |
 
 ## Commands
@@ -36,6 +41,11 @@ cargo run --release -p wenilla-host -- --www web/dist --data /path/to/WoW/Data -
 cargo check --target wasm32-unknown-unknown -p wenilla --no-default-features --features webgpu
                             # the wasm build without linking; what check.yml runs
 cargo check --workspace --all-targets      # native (Debian/Ubuntu: libasound2-dev libudev-dev)
+cargo ndk -t arm64-v8a -P 29 check -p warcraft-survivors-android --no-default-features
+                            # the Android build without linking; what check.yml's android job runs (needs ANDROID_NDK_HOME, cargo-ndk)
+scripts/android-setup.sh    # once per machine: the aarch64-linux-android target, cargo-ndk, NDK and lockfile checks. `make android-toolchain`
+scripts/android-build.sh    # → android/app/build/outputs/apk/ via cargo-ndk and Gradle. `make android`; ANDROID_DEBUG=1 keeps symbols
+scripts/android-data.sh     # fetch-data.sh on this machine, then adb push Data into the installed app's files folder. `make android-data`
 cargo test -p wenilla-realm                # the realm service end to end, mock SOAP, sqlite; no game data needed
 cargo test --workspace                     # ~320 tests need a 1.12.1 patch chain and fail without one, on pristine upstream too
 ```
@@ -99,3 +109,4 @@ google-chrome --user-data-dir=/tmp/wenilla-chrome --enable-unsafe-webgpu --remot
 | the world freezes ~200 ms at zone lines | the soundscape carry (`sound/zone.rs`, `sound/web_load.rs`), wasm-only |
 | short stalls in the browser on the first play of a sound (combat, a new creature, footsteps on new ground) | the SFX carry (`sound/kit/deferred.rs`, the glue and cinematic arms of `sound/glue.rs`/`sound/cinematic.rs`), wasm-only |
 | the prod image is not what `main` says | wenilla-realm/docs/RELEASE.md, "When it breaks" |
+| anything on the Android build: the APK exits at once, no data found, no sound after returning from home | docs/ANDROID.md, "Where to look when" |

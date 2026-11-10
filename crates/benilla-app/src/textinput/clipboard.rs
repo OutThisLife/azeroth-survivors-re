@@ -21,7 +21,8 @@ trait Pasteboard {
 
 // `arboard` has no wasm32 backend at all (there is no OS pasteboard to open) — gated out so this
 // impl only needs the crate on the platforms it ships for (see the Cargo.toml edge, wasm-only).
-#[cfg(not(target_arch = "wasm32"))]
+// Android likewise: no arboard backend, the same no-pasteboard arm below.
+#[cfg(not(any(target_arch = "wasm32", target_os = "android")))]
 impl Pasteboard for arboard::Clipboard {
     fn read_text(&mut self) -> Result<Option<String>, String> {
         // `ContentNotAvailable` is arboard's empty clipboard, not a failure.
@@ -142,7 +143,7 @@ impl HostClipboard {
         self.opened = true;
         self.backend = match wl_display {
             Some(display) => Some(open_wayland(display)),
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(any(target_arch = "wasm32", target_os = "android")))]
             None => match arboard::Clipboard::new() {
                 Ok(clipboard) => Some(Box::new(clipboard)),
                 Err(e) => {
@@ -153,8 +154,9 @@ impl HostClipboard {
             // No pasteboard backend on web: `wayland_display` always answers `None` here (wasm32
             // isn't in its `unix`-and-friends cfg), and the browser's own clipboard is an async,
             // gesture-gated API (`navigator.clipboard`) this synchronous seam can't call into —
-            // the copy/cut/paste chords silently no-op rather than fail loudly.
-            #[cfg(target_arch = "wasm32")]
+            // the copy/cut/paste chords silently no-op rather than fail loudly. Android takes
+            // the same arm until a JNI `ClipboardManager` backend exists.
+            #[cfg(any(target_arch = "wasm32", target_os = "android"))]
             None => None,
         };
         if let Some(backend) = &self.backend {

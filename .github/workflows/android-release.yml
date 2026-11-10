@@ -1,0 +1,141 @@
+# Builds the Android APK (docs/ANDROID.md) and attaches it to a GitHub Release.
+#
+# Push a tag `android-v*` (or run it by hand) and this builds scripts/android-build.sh on a hosted
+# runner: rust + aarch64-linux-android, NDK r28c, the SDK (platform 34), Gradle 8.14.3. The APK is
+# signed with the release key from the repository's secrets (scripts/android-keystore.sh makes it
+# and names them), so each release installs over the last with `adb install -r`; without the
+# secrets it is debug-signed and named `-debugsigned`. It carries no game data; the player
+# supplies their own 1.12.1 Data folder (README, "Play it on Android").
+name: android-release
+on:
+  push:
+    tags: ['android-v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: release tag to create or update (e.g. android-v0.2.0)
+        required: true
+permissions:
+  contents: write
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      # The tag names the app's version: android-vX.Y.Z must match versionName in
+      # android/app/build.gradle.kts, or the app's own info shows a different version.
+      - name: tag matches versionName
+        run: |
+          want="${TAG#android-v}"
+          have=$(sed -n 's/^ *versionName = "\(.*\)"$/\1/p' android/app/build.gradle.kts)
+          [ "$want" = "$have" ] || { echo "::error::tag ${TAG} wants versionName ${want}, android/app/build.gradle.kts has ${have}"; exit 1; }
+      # A release build of bevy and the engine needs more than the runner's free ~14 GB.
+      - name: free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
+      - name: rust toolchain
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: android-release
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r28c
+          link-to-sdk: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+      - name: cargo-ndk
+        run: command -v cargo-ndk || cargo install cargo-ndk --locked
+      # The release key, when the repository has the four secrets scripts/android-keystore.sh
+      # names. Without them the build is debug-signed and the APK says so in its name: it
+      # installs, but no later release-signed build can replace it without an uninstall.
+      - name: release key
+        id: key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -n "${KEYSTORE_BASE64}" ]; then
+            # Half a key set would make Gradle fall back to the debug key under a release name.
+            [ -n "${KS_PASS}" ] && [ -n "${KEY_ALIAS}" ] || { echo "::error::ANDROID_KEYSTORE_BASE64 is set but ANDROID_KEYSTORE_PASSWORD or ANDROID_KEY_ALIAS is missing"; exit 1; }
+            printf '%s' "${KEYSTORE_BASE64}" | base64 -d > "${RUNNER_TEMP}/release.jks"
+            echo "file=${RUNNER_TEMP}/release.jks" >> "$GITHUB_OUTPUT"
+            echo "suffix=" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::no ANDROID_KEYSTORE_BASE64 secret: this APK is debug-signed (scripts/android-keystore.sh sets the key up)"
+            echo "file=" >> "$GITHUB_OUTPUT"
+            echo "suffix=-debugsigned" >> "$GITHUB_OUTPUT"
+          fi
+      - name: build (scripts/android-build.sh)
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+          CARGO_PROFILE_RELEASE_DEBUG: 0
+          ANDROID_GRADLE_TASK: assembleRelease
+          ANDROID_KEYSTORE_FILE: ${{ steps.key.outputs.file }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: scripts/android-build.sh
+      - name: name the APK
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release.apk "dist/azeroth-survivors-${TAG}-arm64${{ steps.key.outputs.suffix }}.apk"
+          sha256sum dist/*.apk | tee dist/SHA256SUMS
+      # Who signed it, for the log: the release key shows the CN from android-keystore.sh. A
+      # release-named APK carrying the debug certificate fails here rather than ships.
+      - name: signing
+        env:
+          SUFFIX: ${{ steps.key.outputs.suffix }}
+        run: |
+          APKSIGNER=$(ls "${ANDROID_HOME}"/build-tools/*/apksigner 2>/dev/null | tail -1)
+          if [ -z "${APKSIGNER}" ]; then echo "apksigner not found; skipping the certificate print"; exit 0; fi
+          CERTS=$("${APKSIGNER}" verify --print-certs dist/*.apk)
+          echo "${CERTS}" | grep -E 'Signer .* DN' || echo "${CERTS}"
+          if [ -z "${SUFFIX}" ] && echo "${CERTS}" | grep -q 'CN=Android Debug'; then
+            echo "::error::the APK is debug-signed although the release key was given"; exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: dist/
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Azeroth Survivors for Android ${{ env.TAG }}
+          prerelease: true
+          files: dist/*
+          body: |
+            Experimental Android build (arm64, Android 10+, Vulkan 1.1 GPU). Not yet tested on a device.
+
+            **No game data is included.** Supply your own WoW 1.12.1 `Data` folder. Install, then from the source folder:
+            ```
+            adb install -r azeroth-survivors-${{ env.TAG }}-arm64${{ steps.key.outputs.suffix }}.apk
+            make android-data
+            ```
+            Or tap **Download** on the app's first screen: it fetches the client from archive.org onto the phone (5.5 GB; 12 GB free while it unpacks). `make android-data` fetches the client on your machine if it is not there yet and copies its `Data` to the phone. To copy a `Data` folder you already have:
+            ```
+            adb push /path/to/WoW/Data /sdcard/Android/data/io.github.songoku119.azerothsurvivors/files/
+            ```
+            Touch controls: left thumb moves, tap or drag on the right to aim, on-screen spell, jump and pause buttons, Back pauses.
+            ${{ steps.key.outputs.suffix == '' && 'Release-signed: `adb install -r` installs it over the previous release-signed build and keeps the game data.' || 'Debug-signed (the repository has no release key yet): it installs, but no later build can replace it without an uninstall.' }} Coming from a debug-signed build (android-v0.2.5 or earlier, or a file named `-debugsigned`), uninstall once more first; that removes the app's `Data` folder, so to keep the 5.5 GB move it aside and back: `adb shell mv /sdcard/Android/data/io.github.songoku119.azerothsurvivors/files/Data /sdcard/Download/Data` before, the reverse after. (`adb uninstall -k` does not help: the other signature is still refused.)
+            Crash logs: `adb logcat -s wsurvivors:* wgpu:*`.

@@ -5,3 +5,9 @@
 play = "run --profile play -p benilla"
 # `cargo survivors`: Warcraft Survivors, server-less, on the same profile.
 survivors = "run --profile play -p warcraft-survivors"
+
+# The Android build (`scripts/android-build.sh`): 16 KB page alignment, which Android 15+ requires
+# of every native library and NDK r27's linker does not default to (r28 does; the flag is
+# harmless there). No `linker =` here: cargo-ndk sets it from `ANDROID_NDK_HOME`.
+[target.aarch64-linux-android]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]

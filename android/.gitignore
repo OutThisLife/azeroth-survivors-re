@@ -1,0 +1,19 @@
+# Gradle and Android Studio state.
+/.gradle/
+/build/
+/app/build/
+/.idea/
+/local.properties
+/.kotlin/
+*.iml
+# The cdylib scripts/android-build.sh drops here; rebuilt every time, hundreds of MB unstripped.
+/app/src/main/jniLibs/
+# The wrapper's jar is a binary; `gradle wrapper` regenerates it and gradlew beside the committed
+# gradle-wrapper.properties.
+/gradle/wrapper/gradle-wrapper.jar
+/gradlew
+/gradlew.bat
+# Signing keys live outside the repository (scripts/android-keystore.sh); the workflow reads
+# the release key from the repository's secrets.
+*.jks
+*.keystore

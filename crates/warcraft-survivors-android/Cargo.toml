@@ -1,0 +1,36 @@
+[package]
+name = "warcraft-survivors-android"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Warcraft Survivors on Android: the survivors launcher as a GameActivity cdylib, with the env shim that stands in for a desktop filesystem"
+
+[lints]
+workspace = true
+
+[features]
+# `scripts/android-build.sh` passes `--no-default-features`: a phone build carries no project
+# folder. The default mirrors `warcraft-survivors` so a host `cargo check --workspace` sees
+# one feature set.
+default = ["dev"]
+dev = ["benilla-app/dev"]
+
+# `cdylib` is what `GameActivity` dlopens (`android.app.lib_name` in the manifest); `rlib` so the
+# host-side unit tests of the env shim link without an Android toolchain.
+[lib]
+name = "warcraft_survivors_android"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+benilla-app = { path = "../benilla-app", default-features = false }
+# `#[bevy_main]` expands to `bevy::android::ANDROID_APP`, so the macro's crate has to be in scope
+# here; it is benilla-app's bevy, so no second build of it.
+bevy = { workspace = true }
+
+# The panic hook's `__android_log_write`: stderr goes nowhere on Android, logcat is the only
+# channel before `LogPlugin` is up. Already in the lock through `bevy_log`.
+[target.'cfg(target_os = "android")'.dependencies]
+android_log-sys = "0.3"
+
+[build-dependencies]
+benilla-buildstamp = { path = "../benilla-buildstamp" }

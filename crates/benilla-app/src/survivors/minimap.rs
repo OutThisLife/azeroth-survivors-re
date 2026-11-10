@@ -65,6 +65,28 @@ pub(super) enum MapButton {
     Toggle,
 }
 
+/// The buttons' edge from `Minimap.xml`.
+const MAP_BUTTON: f32 = 32.0;
+
+impl MapButton {
+    /// Where the button sits in its parent at the reference size (`Minimap.xml`).
+    fn reference(self) -> (f32, f32) {
+        match self {
+            MapButton::ZoomIn => (122.0, 91.0),
+            MapButton::ZoomOut => (96.0, 119.0),
+            MapButton::Toggle => (161.0, -3.0),
+        }
+    }
+
+    /// The button's corner when it is `size` units wide: grown around its reference centre, so
+    /// a touch-sized button sits where the 32-unit one does.
+    pub(super) fn corner(self, size: f32) -> (f32, f32) {
+        let (left, top) = self.reference();
+        let grow = (size - MAP_BUTTON) / 2.0;
+        (left - grow, top - grow)
+    }
+}
+
 /// Decoded RGBA8 art the composite samples.
 struct Rgba {
     w: usize,
@@ -227,18 +249,15 @@ pub(super) fn spawn_cluster(root: &mut ChildSpawnerCommands, font: &Handle<Font>
                         [0.25, 1.0, 0.125, 0.875],
                     ),
                 ));
-                body.spawn((
-                    MapButton::ZoomIn,
-                    Button,
-                    at(122.0, 91.0, 32.0, 32.0),
-                    ImageNode::default(),
-                ));
-                body.spawn((
-                    MapButton::ZoomOut,
-                    Button,
-                    at(96.0, 119.0, 32.0, 32.0),
-                    ImageNode::default(),
-                ));
+                for b in [MapButton::ZoomIn, MapButton::ZoomOut] {
+                    let (left, top) = b.corner(MAP_BUTTON);
+                    body.spawn((
+                        b,
+                        Button,
+                        at(left, top, MAP_BUTTON, MAP_BUTTON),
+                        ImageNode::default(),
+                    ));
+                }
             });
         // `GameTimeFrame`, 50² at the cluster's top right, offset (4, -19).
         let tod = if (DAWN..DUSK).contains(&super::hero::MINUTE_OF_DAY) {
@@ -253,13 +272,35 @@ pub(super) fn spawn_cluster(root: &mut ChildSpawnerCommands, font: &Handle<Font>
                 [tod, tod + 50.0 / 128.0, 0.0, 50.0 / 64.0],
             ),
         ));
+        let (left, top) = MapButton::Toggle.corner(MAP_BUTTON);
         cluster.spawn((
             MapButton::Toggle,
             Button,
-            at(161.0, -3.0, 32.0, 32.0),
+            at(left, top, MAP_BUTTON, MAP_BUTTON),
             ImageNode::default(),
         ));
     });
+}
+
+/// On touch layout the three buttons grow to 48 dp around their centres; the desktop keeps the
+/// reference 32 units.
+pub(super) fn touch_targets(
+    input: Res<super::input::SurvivorsInput>,
+    scale: Res<UiScale>,
+    mut buttons: Query<(&MapButton, &mut Node)>,
+) {
+    let size = if input.touch_active {
+        super::hud::touch_units(scale.0, MAP_BUTTON)
+    } else {
+        MAP_BUTTON
+    };
+    for (b, mut node) in &mut buttons {
+        let (left, top) = b.corner(size);
+        super::hud::set_val(&mut node, |n| &mut n.left, Val::Px(left));
+        super::hud::set_val(&mut node, |n| &mut n.top, Val::Px(top));
+        super::hud::set_val(&mut node, |n| &mut n.width, Val::Px(size));
+        super::hud::set_val(&mut node, |n| &mut n.height, Val::Px(size));
+    }
 }
 
 /// The zoom and minimize buttons: their `Up`/`Down`/`Disabled` art, and a press acts.
@@ -558,6 +599,21 @@ fn blit(buf: &mut [u8], at: Vec2, size: f32, shade: impl Fn(Vec2) -> Option<[f32
                 let dst = f32::from(buf[o + k]);
                 buf[o + k] = (dst + (src[k] - dst) * a) as u8;
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn map_buttons_grow_around_their_centre() {
+        for b in [MapButton::ZoomIn, MapButton::ZoomOut, MapButton::Toggle] {
+            let (l0, t0) = b.corner(MAP_BUTTON);
+            assert_eq!((l0, t0), b.reference());
+            let (l1, t1) = b.corner(MAP_BUTTON + 16.0);
+            assert_eq!((l1, t1), (l0 - 8.0, t0 - 8.0));
         }
     }
 }

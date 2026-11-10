@@ -1,5 +1,6 @@
-//! The class's mobility spell: learned at [`LEARN_LEVEL`], cast only on `F`, never by itself. Each
-//! is the class's own signature escape: a mage blinks, a rogue sprints, a warrior charges.
+//! The class's mobility spell: learned at [`LEARN_LEVEL`], cast only on `F` (or its on-screen
+//! button), never by itself. Each is the class's own signature escape: a mage blinks, a rogue
+//! sprints, a warrior charges.
 
 use bevy::prelude::*;
 
@@ -169,11 +170,12 @@ impl Run {
     }
 }
 
-/// `F`: cast the mobility if it is learned and ready; ticks the cooldown and the running effect.
+/// `F` (or the touch button): cast the mobility if it is learned and ready; ticks the cooldown and
+/// the running effect.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn cast_mobility(
     time: Res<Time>,
-    keys: Res<ButtonInput<KeyCode>>,
+    input: Res<super::input::SurvivorsInput>,
     phase: Res<State<Phase>>,
     mut run: ResMut<Run>,
     world: WorldPoint,
@@ -188,7 +190,7 @@ pub(super) fn cast_mobility(
     m.cd = (m.cd - dt).max(0.0);
     m.haste_t = (m.haste_t - dt).max(0.0);
     m.vanish_t = (m.vanish_t - dt).max(0.0);
-    if *phase.get() != Phase::Playing || run.dead_t.is_some() || !keys.just_pressed(KEY) {
+    if *phase.get() != Phase::Playing || run.dead_t.is_some() || !input.mobility {
         return;
     }
     let Some(def) = run.mobility() else { return };

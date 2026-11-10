@@ -26,6 +26,9 @@ use kira::sound::FromFileError;
 use kira::track::{SendTrackBuilder, SendTrackHandle, SpatialTrackBuilder};
 use kira::{AudioManager, AudioManagerSettings, Decibels, Mix, Tween};
 
+// Ours: the backgrounded app's stop (docs/UPSTREAM.md, "Android carries").
+mod suspend;
+
 use super::limiter;
 use super::meter::{self, LevelReading, MixLevel};
 use super::output::Window;

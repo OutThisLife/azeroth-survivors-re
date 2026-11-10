@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AppCompat because GameActivity is an AppCompatActivity; fullscreen, black until the
+         first frame so the surface swap does not flash white. -->
+    <style name="AppTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+
+    <!-- The game's window spans the display, camera cutout included. By default Android keeps a
+         fullscreen landscape window out of the cutout by shifting it sideways: the game drew at
+         full width from ~95 px in, with a black strip on the cutout side and the minimap, the
+         jump button and the zone list's right edge off the far side. The hole now covers a few
+         pixels of a corner instead; the HUD's edge anchors keep their margins. -->
+    <style name="AppTheme.Game">
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+</resources>

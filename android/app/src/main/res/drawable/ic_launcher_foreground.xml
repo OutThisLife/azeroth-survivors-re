@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The launcher icon's front layer: the favicon's crossed swords (web/favicon.svg, a 64-unit
+     drawing), scaled 1.25x and centred in the 108-unit adaptive canvas: the blade tips then sit just
+     inside the 33-unit safe circle every launcher shape keeps. The disc and its ring are left to the back layer and
+     the mask: a ring of our own would be clipped by every mask but the circle. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="1.25"
+        android:scaleY="1.25"
+        android:translateX="14"
+        android:translateY="14">
+        <!-- Blades. -->
+        <path
+            android:pathData="M15,13 L19,13 L45,39 L42,42 Z"
+            android:strokeColor="#FF2A1806"
+            android:strokeWidth="1.4"
+            android:strokeLineJoin="round">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="32" android:startY="13" android:endX="32" android:endY="51">
+                    <item android:offset="0" android:color="#FFFFE27A" />
+                    <item android:offset="1" android:color="#FFC88A12" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path
+            android:pathData="M49,13 L45,13 L19,39 L22,42 Z"
+            android:strokeColor="#FF2A1806"
+            android:strokeWidth="1.4"
+            android:strokeLineJoin="round">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="32" android:startY="13" android:endX="32" android:endY="51">
+                    <item android:offset="0" android:color="#FFFFE27A" />
+                    <item android:offset="1" android:color="#FFC88A12" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <!-- Guards. -->
+        <path
+            android:pathData="M38,37 L44,43 L41,46 L35,40 Z"
+            android:fillColor="#FFD9A030"
+            android:strokeColor="#FF2A1806"
+            android:strokeWidth="1.4"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M26,37 L20,43 L23,46 L29,40 Z"
+            android:fillColor="#FFD9A030"
+            android:strokeColor="#FF2A1806"
+            android:strokeWidth="1.4"
+            android:strokeLineJoin="round" />
+        <!-- Pommels. -->
+        <path
+            android:pathData="M45,44.6 A3.4,3.4 0 1,1 45,51.4 A3.4,3.4 0 1,1 45,44.6 Z"
+            android:fillColor="#FFC88A12"
+            android:strokeColor="#FF2A1806"
+            android:strokeWidth="1.4" />
+        <path
+            android:pathData="M19,44.6 A3.4,3.4 0 1,1 19,51.4 A3.4,3.4 0 1,1 19,44.6 Z"
+            android:fillColor="#FFC88A12"
+            android:strokeColor="#FF2A1806"
+            android:strokeWidth="1.4" />
+    </group>
+</vector>

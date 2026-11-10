@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Vulkan 1.1 (0x401000) is the only backend the client runs on a phone (WGPU_BACKEND=vulkan
+         from the env shim); required, so the store filters devices without it. -->
+    <uses-feature
+        android:name="android.hardware.vulkan.version"
+        android:version="0x401000"
+        android:required="true" />
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="true" />
+
+    <!-- Only for the launch screen's Download button (DataDownload.kt); the game itself is offline. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- configChanges below lists every change the native side can live through: an unlisted one
+         (a keyboard plugged in, dark mode, a font-scale change) recreates the activity, which
+         android-activity cannot hand to a running Bevy app.
+         No largeHeap: it governs the Java heap, and the client's allocations are native.
+         enableOnBackInvokedCallback=false keeps Back on the onBackPressed path, where
+         MainActivity's callback stops it from finishing the activity. -->
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:allowBackup="false"
+        android:enableOnBackInvokedCallback="false"
+        android:theme="@style/AppTheme">
+
+        <!-- What the icon opens: the checks and the words (LaunchActivity.kt), then MainActivity. -->
+        <activity
+            android:name=".LaunchActivity"
+            android:exported="true"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|fontScale|navigation|density">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- The game itself; only LaunchActivity starts it. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme.Game"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|fontScale|navigation|density">
+
+            <!-- The cdylib GameActivity dlopens: crates/warcraft-survivors-android's [lib] name. -->
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="warcraft_survivors_android" />
+        </activity>
+    </application>
+
+</manifest>

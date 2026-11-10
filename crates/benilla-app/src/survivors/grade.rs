@@ -63,13 +63,18 @@ impl FullscreenMaterial for Grade {
 
 /// Whether the grade is wanted; the camera's `amount` eases toward it.
 #[derive(Resource)]
-struct GradeOn(bool);
+pub(super) struct GradeOn(pub(super) bool);
 
 pub(super) fn plugin(app: &mut App) {
     let on = crate::webenv::var("WOW_GRADE").is_none_or(|v| v != "0");
     app.add_plugins(FullscreenMaterialPlugin::<Grade>::default())
         .insert_resource(GradeOn(on))
-        .add_systems(Update, (attach, toggle, drive).chain());
+        .add_systems(
+            Update,
+            (attach, toggle, drive)
+                .chain()
+                .after(benilla_world::schedule::WorldStage::Input),
+        );
 }
 
 fn attach(
@@ -81,8 +86,9 @@ fn attach(
     }
 }
 
-fn toggle(keys: Res<ButtonInput<KeyCode>>, mut on: ResMut<GradeOn>) {
-    if keys.just_pressed(KeyCode::KeyG) {
+/// `G`, or the pause panel's toggle on touch.
+fn toggle(input: Res<super::input::SurvivorsInput>, mut on: ResMut<GradeOn>) {
+    if input.grade_toggle {
         on.0 = !on.0;
     }
 }
