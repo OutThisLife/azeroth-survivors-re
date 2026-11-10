@@ -161,6 +161,7 @@ object DataDownload {
             val mpqs = entries.filter { !it.isDirectory && isMpq(it.name) }
             if (mpqs.isNotEmpty()) {
                 val total = mpqs.sumOf { it.size.coerceAtLeast(0L) }
+                needRoom(dataDir, total)
                 var done = 0L
                 for (entry in mpqs) {
                     onProgress("Unpacking ${baseName(entry.name)} (${mb(done)} of ${mb(total)} MB done)…")
@@ -195,6 +196,27 @@ object DataDownload {
 
     /** The file [extract] keeps in `Data` until every archive is in. */
     const val UNPACKING_MARK = ".unpacking"
+
+    /**
+     * Refuse to start an unpack the card cannot hold, in words: a write that dies half-way with
+     * ENOSPC says nothing about why, and the usual reason is a second copy of the data nearby
+     * (one moved aside to survive a reinstall, say).
+     */
+    private fun needRoom(dataDir: File, bytes: Long) {
+        val free = try {
+            StatFs(dataDir.path).availableBytes
+        } catch (e: Exception) {
+            return
+        }
+        val margin = 256L * 1024 * 1024
+        if (free < bytes + margin) {
+            throw java.io.IOException(
+                "Not enough space to unpack: the archives need ${mb(bytes)} MB and ${mb(free)} MB is free " +
+                    "on the phone. Free some room (a Data folder moved aside to /sdcard/Download, say) " +
+                    "and tap Unpack again; the download is kept.",
+            )
+        }
+    }
 
     /** Through a `.part` file and a rename, so a half-written archive never passes for a whole one. */
     private fun copyTo(input: InputStream, target: File) {

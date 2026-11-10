@@ -15,8 +15,8 @@ android {
         // 29: scoped storage and the Vulkan 1.1 floor the manifest's uses-feature asks for.
         minSdk = 29
         targetSdk = 34
-        versionCode = 7
-        versionName = "0.2.6"
+        versionCode = 8
+        versionName = "0.2.7"
         // Only the arm64 library is built (scripts/android-build.sh); no 32-bit or x86 slices.
         ndk {
             abiFilters += listOf("arm64-v8a")

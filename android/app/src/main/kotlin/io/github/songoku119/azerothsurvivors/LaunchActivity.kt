@@ -9,6 +9,7 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.Gravity
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -316,12 +317,15 @@ class LaunchActivity : Activity() {
                 }
             } catch (e: Exception) {
                 DataDownload.unpacking = false
+                // The stack for `adb logcat -s wsurvivors:*`; the screen gets the message alone.
+                Log.e("wsurvivors", "unpacking ${zip.path} failed", e)
+                val why = e.message?.takeIf { it.isNotBlank() } ?: e.toString()
                 handler.post {
                     if (isDestroyed) return@post
                     buttons.removeAllViews()
                     show(
                         "Unpacking failed.",
-                        "$e\n\nThe zip is kept at ${zip.path}. If this keeps failing with the whole-item " +
+                        "$why\n\nThe zip is kept at ${zip.path}. If this keeps failing with the whole-item " +
                             "zip, download the direct file instead.",
                     )
                     button("Unpack again") { unpack(id, zip) }
